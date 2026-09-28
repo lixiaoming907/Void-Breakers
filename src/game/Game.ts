@@ -860,6 +860,7 @@ export class Game {
       bannerSub: this.bannerSub,
       weapon: this.stats.weapon,
       upgradeCount: this.upgradesTaken,
+      secondaries: Array.from(this.secondaries.owned.keys()),
     };
   }
 
@@ -958,6 +959,7 @@ export class Game {
       bullets: this.bullets.getPlayerBullets().length,
       weapon: this.stats.weapon,
       upgrades: this.upgradesTaken,
+      secondaries: Array.from(this.secondaries.owned.keys()).join(','),
       shield: this.player.state.shield,
       player: {
         position: {

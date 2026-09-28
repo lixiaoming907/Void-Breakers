@@ -15,19 +15,19 @@ export class Arena {
   private rainPositions: Float32Array;
 
   constructor() {
-    // Deep space / city sky
+    // Subtle distant dust only — no bright white "meteors" streaking overhead.
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 1100;
+    const starCount = 400;
     const positions = new Float32Array(starCount * 3);
     const colors = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
-      const r = 45 + Math.random() * 80;
+      const r = 70 + Math.random() * 50;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = Math.abs(r * Math.cos(phi)) * 0.5 - 2;
+      positions[i * 3 + 1] = Math.abs(r * Math.cos(phi)) * 0.35 + 8;
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-      const c = new THREE.Color().setHSL(0.55 + Math.random() * 0.2, 0.7, 0.55 + Math.random() * 0.4);
+      const c = new THREE.Color().setHSL(0.58, 0.35, 0.18 + Math.random() * 0.12);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -37,10 +37,10 @@ export class Arena {
     this.stars = new THREE.Points(
       starGeo,
       new THREE.PointsMaterial({
-        size: 0.3,
+        size: 0.12,
         vertexColors: true,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.22,
         depthWrite: false,
       }),
     );
@@ -210,25 +210,27 @@ export class Arena {
     ring.position.y = 0.03;
     this.group.add(ring);
 
-    // Light rain / data particles
-    const rainCount = 400;
+    // Data rain covering the FULL arena (was stuck in a 40x32 center patch)
+    const rainCount = 900;
     this.rainPositions = new Float32Array(rainCount * 3);
+    const rainX = ARENA.halfWidth + 8;
+    const rainZ = ARENA.halfDepth + 8;
     for (let i = 0; i < rainCount; i++) {
-      this.rainPositions[i * 3] = (Math.random() - 0.5) * 40;
-      this.rainPositions[i * 3 + 1] = Math.random() * 18;
-      this.rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 32;
+      this.rainPositions[i * 3] = (Math.random() - 0.5) * rainX * 2;
+      this.rainPositions[i * 3 + 1] = Math.random() * 16;
+      this.rainPositions[i * 3 + 2] = (Math.random() - 0.5) * rainZ * 2;
     }
     const rainGeo = new THREE.BufferGeometry();
     rainGeo.setAttribute('position', new THREE.BufferAttribute(this.rainPositions, 3));
     this.rain = new THREE.Points(
       rainGeo,
       new THREE.PointsMaterial({
-        color: '#6ecbff',
-        size: 0.08,
+        color: '#5aa8d0',
+        size: 0.06,
         transparent: true,
-        opacity: 0.35,
+        opacity: 0.22,
         depthWrite: false,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.NormalBlending,
       }),
     );
     this.group.add(this.rain);
@@ -257,7 +259,7 @@ export class Arena {
   }
 
   update(delta: number, elapsed: number): void {
-    this.stars.rotation.y = elapsed * 0.01;
+    this.stars.rotation.y = elapsed * 0.004;
     this.grid.material.opacity = 0.32 + Math.sin(elapsed * 1.5) * 0.1;
 
     this.crystals.forEach((crystal, i) => {
@@ -270,12 +272,18 @@ export class Arena {
       mat.opacity = 0.7 + Math.sin(elapsed * 3 + i * 1.7) * 0.15;
     });
 
-    // rain fall
+    // rain fall — wrap across full arena
     const pos = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute;
     const arr = pos.array as Float32Array;
+    const rainX = ARENA.halfWidth + 8;
+    const rainZ = ARENA.halfDepth + 8;
     for (let i = 0; i < arr.length; i += 3) {
-      arr[i + 1] -= delta * 6.5;
-      if (arr[i + 1] < 0) arr[i + 1] = 16 + Math.random() * 4;
+      arr[i + 1] -= delta * 5.5;
+      if (arr[i + 1] < 0) {
+        arr[i + 1] = 14 + Math.random() * 4;
+        arr[i] = (Math.random() - 0.5) * rainX * 2;
+        arr[i + 2] = (Math.random() - 0.5) * rainZ * 2;
+      }
     }
     pos.needsUpdate = true;
     void COLORS;

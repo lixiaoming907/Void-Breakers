@@ -238,7 +238,8 @@ export class BulletPool {
   }
 
   spawnEnemy(origin: THREE.Vector3, direction: THREE.Vector3, damage: number, speed: number): void {
-    this.spawn('enemy', origin, direction, damage, speed, 2.4, { radius: 0.2 });
+    // long life so long-range shooters can actually reach across the large arena
+    this.spawn('enemy', origin, direction, damage, speed, 6.5, { radius: 0.18 });
   }
 
   private spawn(

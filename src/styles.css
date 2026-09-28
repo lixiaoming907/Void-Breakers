@@ -766,3 +766,12 @@ kbd {
 .hint {
   color: rgba(200, 216, 232, 0.42);
 }
+
+.secondary-metric {
+  min-width: 120px;
+}
+
+.secondary-metric strong {
+  font-size: 0.92rem;
+  color: #9ae0f0;
+}

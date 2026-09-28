@@ -11,6 +11,7 @@ export type GameDiagnostics = {
   bullets?: number;
   weapon?: string;
   upgrades?: number;
+  secondaries?: string;
   shield?: number;
   player: {
     position: { x: number; y: number; z: number };

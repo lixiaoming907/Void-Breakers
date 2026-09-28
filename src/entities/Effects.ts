@@ -9,11 +9,24 @@ type Particle = {
   gravity: number;
 };
 
-const MAX_PARTICLES = 320;
+type Shock = {
+  mesh: THREE.Mesh;
+  life: number;
+  maxLife: number;
+  maxScale: number;
+  active: boolean;
+};
 
+const MAX_PARTICLES = 280;
+const MAX_SHOCKS = 24;
+
+/**
+ * Pooled burst / shockwave VFX — free-list instead of O(n) find() each spawn.
+ */
 export class Effects {
   readonly group = new THREE.Group();
   private readonly particles: Particle[] = [];
+  private readonly particleFree: Particle[] = [];
   private readonly geometry = new THREE.SphereGeometry(0.09, 6, 6);
   private readonly material = new THREE.MeshBasicMaterial({
     color: '#ffffff',
@@ -21,14 +34,9 @@ export class Effects {
     opacity: 0.9,
     depthWrite: false,
   });
-  private readonly shockwaves: {
-    mesh: THREE.Mesh;
-    life: number;
-    maxLife: number;
-    maxScale: number;
-    active: boolean;
-  }[] = [];
-  private readonly shockGeometry = new THREE.RingGeometry(0.4, 0.55, 32);
+  private readonly shockwaves: Shock[] = [];
+  private readonly shockFree: Shock[] = [];
+  private readonly shockGeometry = new THREE.RingGeometry(0.4, 0.55, 28);
   private readonly shockMaterial = new THREE.MeshBasicMaterial({
     color: '#7df9ff',
     transparent: true,
@@ -42,43 +50,70 @@ export class Effects {
       const mesh = new THREE.Mesh(this.geometry, this.material.clone());
       mesh.visible = false;
       this.group.add(mesh);
-      this.particles.push({
+      const p: Particle = {
         mesh,
         velocity: new THREE.Vector3(),
         life: 0,
         maxLife: 1,
         active: false,
         gravity: 0,
-      });
+      };
+      this.particles.push(p);
+      this.particleFree.push(p);
     }
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < MAX_SHOCKS; i++) {
       const mesh = new THREE.Mesh(this.shockGeometry, this.shockMaterial.clone());
       mesh.visible = false;
       mesh.rotation.x = -Math.PI / 2;
       this.group.add(mesh);
-      this.shockwaves.push({
+      const w: Shock = {
         mesh,
         life: 0,
         maxLife: 0.45,
         maxScale: 3,
         active: false,
-      });
+      };
+      this.shockwaves.push(w);
+      this.shockFree.push(w);
     }
   }
 
+  private takeParticle(): Particle | null {
+    return this.particleFree.pop() ?? null;
+  }
+
+  private releaseParticle(p: Particle): void {
+    if (!p.active) return;
+    p.active = false;
+    p.mesh.visible = false;
+    this.particleFree.push(p);
+  }
+
+  private takeShock(): Shock | null {
+    return this.shockFree.pop() ?? null;
+  }
+
+  private releaseShock(w: Shock): void {
+    if (!w.active) return;
+    w.active = false;
+    w.mesh.visible = false;
+    this.shockFree.push(w);
+  }
+
   burst(position: THREE.Vector3, color: string, count = 12, speed = 6, size = 1): void {
-    for (let i = 0; i < count; i++) {
-      const particle = this.particles.find((p) => !p.active);
+    const n = Math.min(count, 18);
+    for (let i = 0; i < n; i++) {
+      const particle = this.takeParticle();
       if (!particle) return;
       particle.active = true;
-      particle.maxLife = 0.35 + Math.random() * 0.45;
+      particle.maxLife = 0.35 + Math.random() * 0.4;
       particle.life = particle.maxLife;
       particle.gravity = -2.2;
       particle.mesh.visible = true;
       particle.mesh.position.copy(position);
       (particle.mesh.material as THREE.MeshBasicMaterial).color.set(color);
       (particle.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95;
-      particle.mesh.scale.setScalar(size * (0.6 + Math.random() * 0.9));
+      particle.mesh.scale.setScalar(size * (0.6 + Math.random() * 0.85));
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
       const s = speed * (0.45 + Math.random() * 0.85);
@@ -91,13 +126,13 @@ export class Effects {
   }
 
   explosion(position: THREE.Vector3, color: string, scale = 1): void {
-    this.burst(position, color, 22, 8 * scale, 1.3 * scale);
-    this.burst(position, '#ffffff', 8, 5 * scale, 0.8);
-    this.shockwave(position, color, 3.2 * scale, 0.5);
+    this.burst(position, color, Math.min(16, 12 + Math.floor(scale * 6)), 7 * scale, 1.1 * scale);
+    this.burst(position, '#ffffff', 5, 4.5 * scale, 0.7);
+    this.shockwave(position, color, 3.0 * scale, 0.45);
   }
 
   shockwave(position: THREE.Vector3, color: string, maxScale = 3, life = 0.45): void {
-    const wave = this.shockwaves.find((w) => !w.active);
+    const wave = this.takeShock();
     if (!wave) return;
     wave.active = true;
     wave.life = life;
@@ -116,8 +151,7 @@ export class Effects {
       if (!particle.active) continue;
       particle.life -= delta;
       if (particle.life <= 0) {
-        particle.active = false;
-        particle.mesh.visible = false;
+        this.releaseParticle(particle);
         continue;
       }
       particle.velocity.y += particle.gravity * delta;
@@ -131,29 +165,26 @@ export class Effects {
       if (!wave.active) continue;
       wave.life -= delta;
       if (wave.life <= 0) {
-        wave.active = false;
-        wave.mesh.visible = false;
+        this.releaseShock(wave);
         continue;
       }
       const t = 1 - wave.life / wave.maxLife;
-      const scale = 0.3 + t * wave.maxScale;
-      wave.mesh.scale.setScalar(scale);
+      wave.mesh.scale.setScalar(0.3 + t * wave.maxScale);
       (wave.mesh.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.7;
     }
   }
 
   clear(): void {
     for (const particle of this.particles) {
-      particle.active = false;
-      particle.mesh.visible = false;
+      if (particle.active) this.releaseParticle(particle);
     }
     for (const wave of this.shockwaves) {
-      wave.active = false;
-      wave.mesh.visible = false;
+      if (wave.active) this.releaseShock(wave);
     }
   }
 
   dispose(): void {
+    this.clear();
     this.geometry.dispose();
     this.shockGeometry.dispose();
     this.material.dispose();

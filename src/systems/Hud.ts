@@ -21,6 +21,7 @@ export type HudSnapshot = {
   bannerSub: string;
   weapon?: string;
   upgradeCount?: number;
+  secondaries?: string[];
 };
 
 const WEAPON_LABEL: Record<string, string> = {
@@ -30,6 +31,13 @@ const WEAPON_LABEL: Record<string, string> = {
   plasma: '等离子',
   railgun: '磁轨',
   flak: '高射',
+};
+
+const SECONDARY_LABEL: Record<string, string> = {
+  orbit: '光轮',
+  missilePod: '导弹舱',
+  nova: '新星',
+  turret: '炮塔',
 };
 
 export class Hud {
@@ -56,6 +64,7 @@ export class Hud {
   private readonly bannerSub: HTMLElement;
   private readonly weaponEl: HTMLElement;
   private readonly upgradesEl: HTMLElement;
+  private readonly secondaryEl: HTMLElement;
 
   constructor() {
     this.root = this.get('#hud');
@@ -81,6 +90,7 @@ export class Hud {
     this.bannerSub = this.get('#wave-banner-sub');
     this.weaponEl = this.get('#weapon-value');
     this.upgradesEl = this.get('#upgrades-value');
+    this.secondaryEl = this.get('#secondary-value');
   }
 
   flashPickup(): void {
@@ -148,6 +158,8 @@ export class Hud {
     this.statusEl.textContent = snapshot.banner || snapshot.waveLabel;
     this.weaponEl.textContent = WEAPON_LABEL[snapshot.weapon ?? 'pulse'] ?? '脉冲';
     this.upgradesEl.textContent = String(snapshot.upgradeCount ?? 0);
+    const secs = (snapshot.secondaries ?? []).map((id) => SECONDARY_LABEL[id] ?? id);
+    this.secondaryEl.textContent = secs.length > 0 ? secs.join(' · ') : '—';
 
     this.menu.classList.toggle('hidden', snapshot.state !== 'menu');
     this.pause.classList.toggle('hidden', snapshot.state !== 'paused');

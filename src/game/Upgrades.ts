@@ -601,7 +601,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   },
   sMissileDmg: {
     id: 'sMissileDmg',
-    name: '高爆弹头',
+    name: '导弹强化',
     description: '导弹伤害 +30%',
     tag: '副武强化',
     maxStacks: 3,
@@ -846,8 +846,19 @@ export function rollUpgradeChoices(
     if (stacks >= def.maxStacks) continue;
     if (def.weapon && stacks > 0) continue;
     if (def.secondary && stacks > 0) continue;
+    // weapon-specific buffs only when that weapon is equipped
     if (def.requiresWeapon && def.requiresWeapon !== ownedWeapon) continue;
+    // secondary buffs ONLY after the matching secondary is unlocked
     if (def.requiresSecondary && !ownedSecondaries.has(def.requiresSecondary)) continue;
+    // belt-and-suspenders: any 副武强化 / 专属 card without a matching owner is dropped
+    if (def.tag === '副武强化') {
+      const need = def.requiresSecondary;
+      if (!need || !ownedSecondaries.has(need)) continue;
+    }
+    if (def.tag === '专属') {
+      const need = def.requiresWeapon;
+      if (!need || need !== ownedWeapon) continue;
+    }
     pool.push(id);
   }
 
