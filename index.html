@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#070d1c" />
+    <link rel="icon" href="data:," />
+    <title>虚空破阵 VOIDBREAKERS</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="虚空破阵游戏画布"></canvas>
+
+      <section id="hud" aria-live="polite">
+        <div class="hud-top">
+          <div class="hud-metric glass">
+            <span>得分</span>
+            <strong id="score-value">0</strong>
+          </div>
+          <div class="hud-metric glass combo-metric">
+            <span>连击</span>
+            <strong id="combo-value">x1</strong>
+          </div>
+          <div class="hud-metric glass">
+            <span>波次</span>
+            <strong id="wave-value">0</strong>
+          </div>
+          <div class="hud-metric glass">
+            <span>敌军</span>
+            <strong id="enemies-value">0</strong>
+          </div>
+          <div class="hud-metric glass">
+            <span>武器</span>
+            <strong id="weapon-value">脉冲</strong>
+          </div>
+          <div class="hud-metric glass">
+            <span>升级</span>
+            <strong id="upgrades-value">0</strong>
+          </div>
+        </div>
+
+        <div class="hud-left glass">
+          <div class="bar-block">
+            <div class="bar-label">
+              <span>装甲</span>
+              <span id="health-text">100</span>
+            </div>
+            <div class="bar-track">
+              <div id="health-fill" class="bar-fill health"></div>
+            </div>
+          </div>
+          <div class="bar-block">
+            <div class="bar-label"><span>护盾</span></div>
+            <div class="bar-track slim">
+              <div id="shield-fill" class="bar-fill shield"></div>
+            </div>
+          </div>
+          <div class="bar-block">
+            <div class="bar-label"><span>冲刺</span></div>
+            <div class="bar-track slim">
+              <div id="dash-fill" class="bar-fill dash"></div>
+            </div>
+          </div>
+          <div class="bar-block">
+            <div class="bar-label"><span>急速</span></div>
+            <div class="bar-track slim">
+              <div id="rapid-fill" class="bar-fill rapid"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="status-line">准备出击</div>
+
+        <div id="wave-banner-wrap">
+          <div id="wave-banner">虚空破阵</div>
+          <div id="wave-banner-sub"></div>
+        </div>
+      </section>
+
+      <div id="upgrade-overlay" class="overlay hidden">
+        <div class="panel glass upgrade-panel">
+          <p class="eyebrow">ROGUE UPGRADE</p>
+          <h2>选择强化</h2>
+          <p class="desc">按 1 / 2 / 3 或点击卡片，选完立刻继续作战</p>
+          <div id="upgrade-cards"></div>
+        </div>
+      </div>
+
+      <div id="menu-overlay" class="overlay">
+        <div class="panel glass">
+          <p class="eyebrow">NEON ARENA SURVIVAL</p>
+          <h1>虚空破阵</h1>
+          <p class="subtitle">VOIDBREAKERS</p>
+          <p class="desc">
+            驾驶截击机闯入霓虹虚空竞技场，粉碎一波波来袭无人机。
+            波次结束可选择肉鸽升级：武器模块、射速、护盾、暴击……不断变强。
+          </p>
+          <div class="controls-grid">
+            <div><kbd>WASD</kbd> 移动</div>
+            <div><kbd>鼠标</kbd> 瞄准</div>
+            <div><kbd>左键 / J</kbd> 射击</div>
+            <div><kbd>Shift / 右键</kbd> 冲刺</div>
+            <div><kbd>1 2 3</kbd> 升级选择</div>
+            <div><kbd>Esc / P</kbd> 暂停</div>
+          </div>
+          <button id="start-button" class="primary-btn" type="button">开始作战</button>
+          <p class="hint">按 Enter 或任意键开始</p>
+        </div>
+      </div>
+
+      <div id="pause-overlay" class="overlay hidden">
+        <div class="panel glass">
+          <h2>已暂停</h2>
+          <p class="desc">按 Esc / P 继续，或点击下方按钮</p>
+          <button id="resume-button" class="primary-btn" type="button">继续</button>
+        </div>
+      </div>
+
+      <div id="gameover-overlay" class="overlay hidden">
+        <div class="panel glass">
+          <p class="eyebrow">MISSION FAILED</p>
+          <h2>任务失败</h2>
+          <div class="stats-row">
+            <div>
+              <span>本局得分</span>
+              <strong id="final-score">0</strong>
+            </div>
+            <div>
+              <span>到达波次</span>
+              <strong id="final-wave">0</strong>
+            </div>
+            <div>
+              <span>最高分</span>
+              <strong id="final-best">0</strong>
+            </div>
+          </div>
+          <button id="restart-button" class="primary-btn" type="button">再来一局</button>
+          <p class="hint">按 Enter 立即重开</p>
+        </div>
+      </div>
+
+      <div id="touch-controls" aria-hidden="true">
+        <div id="touch-stick">
+          <div id="touch-knob"></div>
+        </div>
+        <div class="touch-actions">
+          <button id="fire-button" type="button">开火</button>
+          <button id="dash-button" type="button">冲刺</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

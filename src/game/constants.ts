@@ -1,0 +1,115 @@
+export const ARENA = {
+  halfWidth: 52,
+  halfDepth: 38,
+} as const;
+
+export const PLAYER = {
+  speed: 9.2,
+  dashMultiplier: 2.35,
+  acceleration: 16,
+  radius: 0.28,
+  maxHealth: 100,
+  fireCooldown: 0.145,
+  rapidFireCooldown: 0.075,
+  bulletSpeed: 26,
+  bulletDamage: 14,
+  dashCooldown: 1.1,
+  dashDuration: 0.18,
+  invulnAfterHit: 0.85,
+} as const;
+
+export const ENEMIES = {
+  drone: {
+    health: 34,
+    speed: 4.8,
+    damage: 11,
+    score: 100,
+    radius: 0.3,
+    color: '#ff4d6d',
+  },
+  striker: {
+    health: 52,
+    speed: 3.2,
+    damage: 10,
+    score: 180,
+    radius: 0.34,
+    color: '#c77dff',
+    fireCooldown: 1.75,
+    bulletSpeed: 12,
+  },
+  tank: {
+    health: 145,
+    speed: 2.1,
+    damage: 20,
+    score: 320,
+    radius: 0.5,
+    color: '#ff9f1c',
+  },
+  boss: {
+    health: 680,
+    speed: 2.4,
+    damage: 16,
+    score: 1500,
+    radius: 0.78,
+    color: '#00f5d4',
+    fireCooldown: 0.95,
+  },
+  swarm: {
+    health: 12,
+    speed: 6.6,
+    damage: 6,
+    score: 40,
+    radius: 0.18,
+    color: '#ff6b9d',
+  },
+  sniper: {
+    health: 38,
+    speed: 2.5,
+    damage: 16,
+    score: 220,
+    radius: 0.32,
+    color: '#ff2e88',
+    fireCooldown: 2.4,
+    bulletSpeed: 20,
+  },
+  splitter: {
+    health: 70,
+    speed: 2.8,
+    damage: 14,
+    score: 260,
+    radius: 0.4,
+    color: '#ff9f1c',
+  },
+  bomber: {
+    health: 42,
+    speed: 5.2,
+    damage: 28,
+    score: 200,
+    radius: 0.32,
+    color: '#ff4d6d',
+  },
+} as const;
+
+export const WAVES = {
+  breakDuration: 2.4,
+  spawnMargin: 2.2,
+} as const;
+
+export const COLORS = {
+  bg: '#070b14',
+  fog: '#0b1220',
+  grid: '#1a2740',
+  neonCyan: '#00f5d4',
+  neonMagenta: '#f15bb5',
+  neonAmber: '#fee440',
+  neonRed: '#ff4d6d',
+  neonViolet: '#c77dff',
+  player: '#00e5ff',
+  playerAccent: '#fee440',
+  bullet: '#7df9ff',
+  enemyBullet: '#ff6b9d',
+  health: '#2dff88',
+  shield: '#4cc9f0',
+  rapid: '#f15bb5',
+  score: '#fee440',
+} as const;
