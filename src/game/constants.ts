@@ -108,8 +108,9 @@ export const COLORS = {
   playerAccent: '#fee440',
   bullet: '#7df9ff',
   enemyBullet: '#ff6b9d',
-  health: '#1fbf6a',
-  shield: '#2a9ec4',
-  rapid: '#ffb020',
-  score: '#c9a227',
+  // Pickup identity colors (also mirrored in HUD bars)
+  health: '#ff3b4e',
+  shield: '#3aa0ff',
+  rapid: '#b44dff',
+  score: '#2dff88',
 } as const;

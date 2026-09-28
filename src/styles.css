@@ -799,3 +799,24 @@ kbd {
   color: #9ae0f0;
   font-variant-numeric: tabular-nums;
 }
+
+/* Pickup-matched HUD bars: health red, shield blue, rapid purple */
+.bar-fill.health {
+  background: linear-gradient(90deg, #e02038, #ff5a6e);
+}
+
+.bar-fill.shield {
+  background: linear-gradient(90deg, #2a7fff, #5ec8ff);
+}
+
+.bar-fill.dash {
+  background: linear-gradient(90deg, #d4b84a, #e8c86a);
+}
+
+.bar-fill.rapid {
+  background: linear-gradient(90deg, #8a2be2, #c44dff);
+}
+
+.bar-label span:first-child {
+  letter-spacing: 0.04em;
+}

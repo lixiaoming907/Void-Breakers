@@ -23,7 +23,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type GameState, type HudSnapshot } from '../systems/Hud';
 import { PostFX } from '../systems/PostFX';
-import { WaveSystem, waveStatScale } from '../systems/WaveSystem';
+import { WaveSystem, playerDamageScale, waveStatScale } from '../systems/WaveSystem';
 import { createSeededRandom, range, type SeededRandom } from '../utils/random';
 
 export class Game {
@@ -230,10 +230,11 @@ export class Game {
       enemyPos,
     );
     for (const hit of secEvents.orbitHits) {
+      const dmg = hit.damage * playerDamageScale(this.waves.currentWave);
       for (const enemy of this.enemies.enemies) {
         if (!enemy.alive) continue;
         if (Math.hypot(enemy.group.position.x - hit.x, enemy.group.position.z - hit.z) < enemy.radius + 0.2) {
-          this.damageEnemy(enemy, hit.damage, false);
+          this.damageEnemy(enemy, dmg, false);
         }
       }
     }
@@ -245,7 +246,7 @@ export class Game {
         this.bullets.firePlayer({
           origin: new THREE.Vector3(m.x, 0.45, m.z),
           direction: dir,
-          damage: m.damage * this.stats.damageMult,
+          damage: m.damage * this.stats.damageMult * playerDamageScale(this.waves.currentWave),
           speed: 12,
           weapon: 'homing',
           multishot: 0,
@@ -271,7 +272,11 @@ export class Game {
         if (!enemy.alive) continue;
         const d = Math.hypot(enemy.group.position.x - nova.x, enemy.group.position.z - nova.z);
         if (d <= nova.radius) {
-          this.damageEnemy(enemy, nova.damage * this.stats.damageMult * (1 - d / nova.radius * 0.35), false);
+          this.damageEnemy(
+            enemy,
+            nova.damage * this.stats.damageMult * playerDamageScale(this.waves.currentWave) * (1 - (d / nova.radius) * 0.35),
+            false,
+          );
         }
       }
     }
@@ -281,7 +286,7 @@ export class Game {
       this.bullets.firePlayer({
         origin: new THREE.Vector3(shot.x, 0.4, shot.z),
         direction: dir,
-        damage: shot.damage * this.stats.damageMult,
+        damage: shot.damage * this.stats.damageMult * playerDamageScale(this.waves.currentWave),
         speed: 20,
         weapon: 'pulse',
         multishot: 0,
@@ -360,7 +365,10 @@ export class Game {
 
     const crit = this.rng() < this.stats.critChance;
     const damage =
-      PLAYER.bulletDamage * this.stats.damageMult * (crit ? this.stats.critDamageMult : 1);
+      PLAYER.bulletDamage *
+      this.stats.damageMult *
+      playerDamageScale(this.waves.currentWave) *
+      (crit ? this.stats.critDamageMult : 1);
 
     const s = this.stats;
     let weaponDamageMult = 1;
@@ -657,8 +665,8 @@ export class Game {
   private onEnemyKilled(enemy: Enemy): void {
     this.combo += 1;
     this.comboTimer = 2.8;
-    const comboMult = 1 + Math.floor(this.combo / 5) * 0.25;
-    this.score += Math.floor(enemy.score * comboMult);
+    const comboMult = 1 + Math.floor(this.combo / 5) * 0.35;
+    this.score += Math.floor(enemy.score * comboMult * (1 + this.waves.currentWave * 0.04));
     this.audio.explode();
     this.effects.explosion(
       enemy.group.position.clone().setY(0.55),

@@ -7,10 +7,16 @@ export type WavePlan = {
 
 /** Multiplier applied to enemy HP/damage as waves climb. */
 export function waveStatScale(wave: number): { hp: number; damage: number; count: number } {
-  const hp = 1 + wave * 0.14 + Math.floor(wave / 10) * 0.35;
-  const damage = 1 + wave * 0.055;
+  // Enemy HP grows, but player damage also ramps (see Game.playerDamageScale) so TTK stays punchy
+  const hp = 1 + wave * 0.11 + Math.floor(wave / 10) * 0.28;
+  const damage = 1 + wave * 0.05;
   const count = 1 + wave * 0.045;
   return { hp, damage, count };
+}
+
+/** Mild player damage growth so late waves stay hard but satisfying to clear. */
+export function playerDamageScale(wave: number): number {
+  return 1 + wave * 0.085;
 }
 
 export class WaveSystem {
