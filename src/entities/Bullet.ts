@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { WeaponId } from '../game/Upgrades';
 
-export type BulletKind = 'player' | 'enemy' | 'player-frag' | 'player-plasma';
+export type BulletKind = 'player' | 'enemy' | 'player-frag' | 'player-plasma' | 'player-beam';
 
 export type Bullet = {
   mesh: THREE.Mesh;
@@ -125,43 +125,53 @@ export class BulletPool {
     const dmgMul = req.damage * req.weaponDamageMult;
 
     switch (req.weapon) {
+      // ── 散弹：短程扇形弹幕，无追踪 ──
       case 'scatter': {
-        const pelletCount = 5 + req.multishot + req.weaponExtra;
-        const spread = 0.32;
+        const pelletCount = 7 + req.multishot + req.weaponExtra;
+        const spread = 0.38;
         for (let i = 0; i < pelletCount; i++) {
           const t = pelletCount <= 1 ? 0 : (i / (pelletCount - 1)) * 2 - 1;
           const d = dir
             .clone()
             .addScaledVector(right, t * spread)
+            .addScaledVector(dir, (Math.random() - 0.5) * 0.08)
             .normalize();
-          this.spawn('player', req.origin, d, dmgMul * 0.42, req.speed * 1.1, 0.95, {
+          this.spawn('player', req.origin, d, dmgMul * 0.38, req.speed * 1.15, 0.72, {
             pierce: req.pierce + req.weaponPierce,
-            radius: 0.13,
+            radius: 0.12,
             crit: req.crit,
+            visualScale: 0.75,
           });
         }
         break;
       }
+
+      // ── 追踪飞弹：少而重的导弹，强锁定 ──
       case 'homing': {
         for (let i = 0; i < shots; i++) {
-          const offset = (i - (shots - 1) / 2) * 0.28;
+          const offset = (i - (shots - 1) / 2) * 0.35;
           const d = dir.clone().addScaledVector(right, offset).normalize();
-          this.spawn('player', req.origin, d, dmgMul * 1.25, req.speed * 0.52, 3.4 * req.weaponLife, {
+          this.spawn('player', req.origin, d, dmgMul * 1.7, req.speed * 0.38, 4.2 * req.weaponLife, {
             pierce: 0,
-            homing: 3.8 * req.weaponTurn,
-            radius: 0.18,
+            homing: 5.2 * req.weaponTurn,
+            radius: 0.24,
             explosive: req.explosive,
             crit: req.crit,
+            visualScale: 1.35,
+            missile: true,
           });
         }
         break;
       }
+
+      // ── 等离子：大能量球 + AOE ──
       case 'plasma': {
-        this.spawn('player-plasma', req.origin, dir, dmgMul * 2.0, req.speed * 0.52, 2.5 * req.weaponLife, {
+        this.spawn('player-plasma', req.origin, dir, dmgMul * 2.2, req.speed * 0.48, 2.6 * req.weaponLife, {
           pierce: 0,
           explosive: true,
-          radius: 0.32 * req.weaponTurn,
+          radius: 0.36 * req.weaponTurn,
           crit: req.crit,
+          visualScale: 1.45,
         });
         if (req.multishot + req.weaponExtra > 0) {
           const extras = req.multishot + req.weaponExtra;
@@ -170,28 +180,34 @@ export class BulletPool {
               .clone()
               .addScaledVector(right, (i % 2 === 0 ? 1 : -1) * 0.16 * (i + 1))
               .normalize();
-            this.spawn('player-plasma', req.origin, d, dmgMul * 1.05, req.speed * 0.48, 2.2, {
+            this.spawn('player-plasma', req.origin, d, dmgMul * 1.05, req.speed * 0.45, 2.2, {
               explosive: true,
-              radius: 0.26 * req.weaponTurn,
+              radius: 0.28 * req.weaponTurn,
               crit: req.crit,
+              visualScale: 1.1,
             });
           }
         }
         break;
       }
+
+      // ── 磁轨炮：粗动能穿甲弹（短粗弹体，有重量感）──
       case 'railgun': {
-        // multishot (global + weapon) always applies after weapon swap
         for (let i = 0; i < shots; i++) {
-          const offset = (i - (shots - 1) / 2) * 0.12;
+          const offset = (i - (shots - 1) / 2) * 0.14;
           const d = dir.clone().addScaledVector(right, offset).normalize();
-          this.spawn('player', req.origin, d, dmgMul * 2.8, req.speed * 1.5, 1.05, {
+          this.spawn('player', req.origin, d, dmgMul * 3.0, req.speed * 1.15, 1.25, {
             pierce: req.pierce + 3 + req.weaponPierce,
-            radius: 0.16,
+            radius: 0.24,
             crit: req.crit,
+            visualScale: 1.7,
+            rail: true,
           });
         }
         break;
       }
+
+      // ── 高射炮：弹丸命中/到时裂成碎片 ──
       case 'flak': {
         for (let i = 0; i < 2 + req.multishot + Math.floor(req.weaponExtra / 2); i++) {
           const t = i === 0 ? 0 : (i % 2 === 0 ? 1 : -1) * 0.16 * Math.ceil(i / 2);
@@ -208,20 +224,26 @@ export class BulletPool {
         }
         break;
       }
+
+      // ── 光矛：长条激光束，直线扫穿，形态与磁轨弹完全不同 ──
       case 'lance': {
-        // wide piercing beam
-        const width = req.weaponTurn; // reused as width factor
-        for (let i = 0; i < Math.max(1, shots); i++) {
-          const offset = (i - (Math.max(1, shots) - 1) / 2) * 0.1;
+        const width = Math.max(0.6, req.weaponTurn);
+        const beams = Math.max(1, Math.min(shots, 3));
+        for (let i = 0; i < beams; i++) {
+          const offset = (i - (beams - 1) / 2) * 0.22 * width;
           const d = dir.clone().addScaledVector(right, offset).normalize();
-          this.spawn('player', req.origin, d, dmgMul * 3.1, req.speed * 1.7, 0.85, {
-            pierce: req.pierce + 6 + req.weaponPierce,
-            radius: 0.22 * width,
+          this.spawn('player-beam', req.origin, d, dmgMul * 1.65, req.speed * 2.4, 0.42, {
+            pierce: 40 + req.pierce + req.weaponPierce,
+            radius: 0.42 * width,
             crit: req.crit,
+            visualScale: 1,
+            beamWidth: width,
           });
         }
         break;
       }
+
+      // ── 弹射手枪：命中后弹向下一目标 ──
       case 'ricochet': {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.12;
@@ -231,27 +253,40 @@ export class BulletPool {
             radius: 0.16,
             crit: req.crit,
             bounces: req.weaponExtra + 1,
+            visualScale: 1.15,
           });
         }
         break;
       }
+
+      // ── 蜂群：大量微小飞镖，轻微曲线制导（不是导弹）──
       case 'swarm': {
-        const darts = 4 + req.multishot + req.weaponExtra;
+        const darts = 8 + req.multishot * 2 + req.weaponExtra;
         for (let i = 0; i < darts; i++) {
           const t = darts <= 1 ? 0 : (i / (darts - 1)) * 2 - 1;
+          const lateral = t * 0.72;
           const d = dir
             .clone()
-            .addScaledVector(right, t * 0.55)
+            .addScaledVector(right, lateral)
             .normalize();
-          this.spawn('player', req.origin, d, dmgMul * 0.55, req.speed * 0.55, 2.8, {
+          // spawn with a sideways component so flight curves
+          const curveDir = d
+            .clone()
+            .addScaledVector(right, lateral * 0.45)
+            .normalize();
+          this.spawn('player', req.origin, curveDir, dmgMul * 0.32, req.speed * 0.78, 1.7, {
             pierce: 0,
-            homing: 3.2 * req.weaponTurn,
-            radius: 0.12,
+            homing: 1.6 * req.weaponTurn,
+            radius: 0.1,
             crit: req.crit,
+            visualScale: 0.55,
+            swarm: true,
           });
         }
         break;
       }
+
+      // ── 脉冲：均衡连射小弹 ──
       case 'pulse':
       default: {
         for (let i = 0; i < shots; i++) {
@@ -262,6 +297,7 @@ export class BulletPool {
             explosive: req.explosive,
             radius: 0.14,
             crit: req.crit,
+            visualScale: 1,
           });
         }
         break;
@@ -305,6 +341,11 @@ export class BulletPool {
       splitCount?: number;
       splitDamage?: number;
       bounces?: number;
+      visualScale?: number;
+      rail?: boolean;
+      missile?: boolean;
+      swarm?: boolean;
+      beamWidth?: number;
     } = {},
   ): void {
     const bullet = this.bullets.find((b) => !b.active) ?? this.recycleOldest();
@@ -348,28 +389,45 @@ export class BulletPool {
       bullet.mesh.geometry = this.geoFrag;
       bullet.mesh.material = this.matFrag;
       glow.visible = false;
-      bullet.mesh.scale.setScalar(1);
+      bullet.mesh.scale.setScalar(opts.visualScale ?? 1);
+    } else if (kind === 'player-beam') {
+      // long laser strip — clearly not a rail slug
+      bullet.mesh.geometry = this.geoLaser;
+      bullet.mesh.material = this.matLaser;
+      glow.material = this.glowPlayer;
+      glow.visible = true;
+      const w = opts.beamWidth ?? 1;
+      bullet.mesh.scale.set(0.55 * w, 0.35, 14);
+      bullet.mesh.lookAt(origin.clone().add(direction));
     } else {
-      // player pulse / rail / homing shells
-      const isHoming = opts.homing && opts.homing > 0;
-      if (isHoming) {
+      // player projectiles — visual identity per weapon
+      const vs = opts.visualScale ?? 1;
+      if (opts.missile) {
         bullet.mesh.geometry = this.geoMissile;
         bullet.mesh.material = this.matMissile;
-      } else if ((opts.pierce ?? 0) >= 3) {
+        bullet.mesh.scale.setScalar(vs * 1.2);
+      } else if (opts.rail) {
+        // thick kinetic slug
         bullet.mesh.geometry = this.geoLaser;
         bullet.mesh.material = this.matLaser;
+        bullet.mesh.scale.set(1.35 * vs, 1.35 * vs, 2.6 * vs);
         bullet.mesh.lookAt(origin.clone().add(direction));
+      } else if (opts.swarm) {
+        bullet.mesh.geometry = this.geoFrag;
+        bullet.mesh.material = this.matFrag;
+        bullet.mesh.scale.setScalar(vs);
+        glow.visible = false;
       } else {
         bullet.mesh.geometry = this.geoBolt;
         bullet.mesh.material = bullet.crit ? this.matCrit : this.matPlayer;
+        bullet.mesh.scale.setScalar(vs * (bullet.crit ? 1.35 : 1));
       }
-      glow.material = this.glowPlayer;
-      glow.visible = true;
-      bullet.mesh.scale.setScalar(bullet.crit ? 1.35 : 1);
+      glow.material = opts.swarm ? this.glowPlasma : this.glowPlayer;
+      if (!opts.swarm) glow.visible = true;
     }
 
-    if (isHomingLike(bullet)) {
-      bullet.mesh.lookAt(origin.clone().add(direction));
+    if (isHomingLike(bullet) || opts.missile || opts.rail || kind === 'player-beam') {
+      bullet.mesh.lookAt(bullet.mesh.position.clone().add(bullet.velocity));
     }
   }
 
@@ -480,7 +538,12 @@ export class BulletPool {
   /** All player-side bullets including frags and plasma. */
   getPlayerBullets(): Bullet[] {
     return this.bullets.filter(
-      (b) => b.active && (b.kind === 'player' || b.kind === 'player-frag' || b.kind === 'player-plasma'),
+      (b) =>
+        b.active &&
+        (b.kind === 'player' ||
+          b.kind === 'player-frag' ||
+          b.kind === 'player-plasma' ||
+          b.kind === 'player-beam'),
     );
   }
 

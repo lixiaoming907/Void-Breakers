@@ -321,7 +321,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   lance: {
     id: 'lance',
     name: '光矛',
-    description: '粗高能光束，贯穿直线上的所有敌人。',
+    description: '发射长条激光束，直线扫穿大片敌人。',
     tag: '武器',
     maxStacks: 1,
     weapon: 'lance',
@@ -337,7 +337,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   swarm: {
     id: 'swarm',
     name: '蜂群发射器',
-    description: '扇形放出大量追踪飞镖。',
+    description: '扇形放出大量微小飞镖，轻微曲线咬住敌人。',
     tag: '武器',
     maxStacks: 1,
     weapon: 'swarm',
