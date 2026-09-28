@@ -108,8 +108,8 @@ export const COLORS = {
   playerAccent: '#fee440',
   bullet: '#7df9ff',
   enemyBullet: '#ff6b9d',
-  health: '#2dff88',
-  shield: '#4cc9f0',
-  rapid: '#f15bb5',
-  score: '#fee440',
+  health: '#1fbf6a',
+  shield: '#2a9ec4',
+  rapid: '#ffb020',
+  score: '#c9a227',
 } as const;

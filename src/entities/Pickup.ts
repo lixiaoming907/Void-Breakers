@@ -32,14 +32,16 @@ export class PickupManager {
 
   constructor() {
     (Object.keys(COLORS_MAP) as PickupKind[]).forEach((kind) => {
+      // rapid (amber) is boosted so it reads clearly; others toned down to avoid bloom glare
+      const boost = kind === 'rapid' ? 1.35 : kind === 'score' ? 0.55 : 0.42;
       this.materials.set(
         kind,
         new THREE.MeshStandardMaterial({
           color: COLORS_MAP[kind],
           emissive: COLORS_MAP[kind],
-          emissiveIntensity: 0.85,
-          roughness: 0.25,
-          metalness: 0.4,
+          emissiveIntensity: boost,
+          roughness: 0.32,
+          metalness: 0.35,
         }),
       );
     });

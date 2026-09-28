@@ -22,6 +22,7 @@ export type HudSnapshot = {
   weapon?: string;
   upgradeCount?: number;
   secondaries?: string[];
+  statsBlock?: string;
 };
 
 const WEAPON_LABEL: Record<string, string> = {
@@ -65,6 +66,7 @@ export class Hud {
   private readonly weaponEl: HTMLElement;
   private readonly upgradesEl: HTMLElement;
   private readonly secondaryEl: HTMLElement;
+  private readonly statsEl: HTMLElement;
 
   constructor() {
     this.root = this.get('#hud');
@@ -91,6 +93,7 @@ export class Hud {
     this.weaponEl = this.get('#weapon-value');
     this.upgradesEl = this.get('#upgrades-value');
     this.secondaryEl = this.get('#secondary-value');
+    this.statsEl = this.get('#pause-stats');
   }
 
   flashPickup(): void {
@@ -160,6 +163,7 @@ export class Hud {
     this.upgradesEl.textContent = String(snapshot.upgradeCount ?? 0);
     const secs = (snapshot.secondaries ?? []).map((id) => SECONDARY_LABEL[id] ?? id);
     this.secondaryEl.textContent = secs.length > 0 ? secs.join(' · ') : '—';
+    if (snapshot.statsBlock) this.statsEl.innerHTML = snapshot.statsBlock;
 
     this.menu.classList.toggle('hidden', snapshot.state !== 'menu');
     this.pause.classList.toggle('hidden', snapshot.state !== 'paused');

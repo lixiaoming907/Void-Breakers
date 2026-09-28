@@ -17,8 +17,8 @@ type Shock = {
   active: boolean;
 };
 
-const MAX_PARTICLES = 280;
-const MAX_SHOCKS = 24;
+const MAX_PARTICLES = 480;
+const MAX_SHOCKS = 48;
 
 /**
  * Pooled burst / shockwave VFX — free-list instead of O(n) find() each spawn.

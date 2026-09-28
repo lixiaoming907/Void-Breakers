@@ -23,7 +23,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type GameState, type HudSnapshot } from '../systems/Hud';
 import { PostFX } from '../systems/PostFX';
-import { WaveSystem } from '../systems/WaveSystem';
+import { WaveSystem, waveStatScale } from '../systems/WaveSystem';
 import { createSeededRandom, range, type SeededRandom } from '../utils/random';
 
 export class Game {
@@ -265,7 +265,7 @@ export class Game {
     }
     for (const nova of secEvents.novas) {
       this.effects.shockwave(new THREE.Vector3(nova.x, 0, nova.z), '#00f5d4', nova.radius * 0.85, 0.4);
-      this.cameraRig.addShake(0.2);
+      this.cameraRig.addShake(0.05);
       this.postfx.pulse(1.05);
       for (const enemy of this.enemies.enemies) {
         if (!enemy.alive) continue;
@@ -474,7 +474,7 @@ export class Game {
       p.y = 0;
       p.x = THREE.MathUtils.clamp(p.x, -ARENA.halfWidth + 1, ARENA.halfWidth - 1);
       p.z = THREE.MathUtils.clamp(p.z, -ARENA.halfDepth + 1, ARENA.halfDepth - 1);
-      this.enemies.spawn(kind, p);
+      this.enemies.spawn(kind, p, waveStatScale(this.waves.currentWave));
       return;
     }
     const side = this.rng();
@@ -503,7 +503,7 @@ export class Game {
       x = THREE.MathUtils.clamp(x + Math.sign(x || 1) * 4, -ARENA.halfWidth + 1, ARENA.halfWidth - 1);
     }
 
-    this.enemies.spawn(kind, new THREE.Vector3(x, 0, z));
+    this.enemies.spawn(kind, new THREE.Vector3(x, 0, z), waveStatScale(this.waves.currentWave));
   }
 
   private handleCollisions(delta: number): void {
@@ -553,7 +553,7 @@ export class Game {
         bullet.mesh.visible = false;
         if (this.player.takeDamage(bullet.damage)) {
           this.audio.hurt();
-          this.cameraRig.addShake(0.35);
+          this.cameraRig.addShake(0.12);
           this.effects.burst(playerPos.clone().setY(0.5), '#ff4d6d', 10, 5, 1);
           this.combo = 0;
           if (this.player.state.shield <= 0) {
@@ -576,14 +576,14 @@ export class Game {
           this.damageEnemy(enemy, 9999, false);
           this.player.takeDamage(enemy.damage);
           this.audio.hurt();
-          this.cameraRig.addShake(0.7);
+          this.cameraRig.addShake(0.22);
           this.effects.burst(playerPos.clone().setY(0.5), '#ff4d6d', 16, 7, 1.1);
           this.combo = 0;
           continue;
         }
         if (this.player.takeDamage(enemy.damage * 0.65)) {
           this.audio.hurt();
-          this.cameraRig.addShake(0.45);
+          this.cameraRig.addShake(0.15);
           this.effects.burst(playerPos.clone().setY(0.5), '#ff4d6d', 10, 5, 1);
           const push = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(3.2);
           this.player.velocity.add(push);
@@ -642,7 +642,7 @@ export class Game {
 
   private explodeAt(position: THREE.Vector3, damage: number, source?: Enemy): void {
     this.effects.explosion(position, '#00f5d4', 1.1);
-    this.cameraRig.addShake(0.28);
+    this.cameraRig.addShake(0.06);
     this.postfx.pulse(1.15);
     for (const enemy of this.enemies.enemies) {
       if (!enemy.alive || enemy === source) continue;
@@ -665,7 +665,7 @@ export class Game {
       enemy.kind === 'boss' ? '#ff2e88' : '#ff4d6d',
       enemy.kind === 'boss' ? 2.0 : enemy.kind === 'swarm' ? 0.55 : 0.9,
     );
-    this.cameraRig.addShake(enemy.kind === 'boss' ? 0.9 : enemy.kind === 'swarm' ? 0.08 : 0.18);
+    this.cameraRig.addShake(enemy.kind === 'boss' ? 0.85 : enemy.kind === 'swarm' ? 0.015 : 0.04);
     this.hitStop = enemy.kind === 'boss' ? 0.1 : enemy.kind === 'swarm' ? 0.015 : 0.035;
     this.postfx.pulse(enemy.kind === 'boss' ? 1.25 : 1.0);
 
@@ -861,7 +861,30 @@ export class Game {
       weapon: this.stats.weapon,
       upgradeCount: this.upgradesTaken,
       secondaries: Array.from(this.secondaries.owned.keys()),
+      statsBlock: this.buildStatsBlock(),
     };
+  }
+
+  private buildStatsBlock(): string {
+    const s = this.player.state;
+    const st = this.stats;
+    const rows: [string, string][] = [
+      ['装甲', `${Math.ceil(s.health)} / ${s.maxHealth}`],
+      ['护盾', `${Math.ceil(s.shield)} / ${s.maxShield}`],
+      ['伤害倍率', `×${st.damageMult.toFixed(2)}`],
+      ['射速倍率', `×${st.fireRateMult.toFixed(2)}`],
+      ['移速倍率', `×${st.moveSpeedMult.toFixed(2)}`],
+      ['弹速倍率', `×${st.bulletSpeedMult.toFixed(2)}`],
+      ['暴击率', `${Math.round(st.critChance * 100)}%`],
+      ['暴击伤害', `×${st.critDamageMult.toFixed(2)}`],
+      ['多重射击', `+${st.multishotBonus}`],
+      ['穿透', `+${st.pierceBonus + (st.weapon === 'railgun' ? 3 + st.railPierce : st.weapon === 'scatter' ? st.scatterPierce : 0)}`],
+      ['护盾回充', `${st.shieldRegenPerSec.toFixed(1)}/s`],
+      ['冲刺冷却', `${(this.player.getDashCooldownMax()).toFixed(2)}s`],
+    ];
+    return rows
+      .map(([k, v]) => `<div class="stat-row"><span>${k}</span><strong>${v}</strong></div>`)
+      .join('');
   }
 
   private installTestHooks(): void {

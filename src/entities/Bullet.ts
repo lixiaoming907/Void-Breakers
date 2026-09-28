@@ -21,7 +21,7 @@ export type Bullet = {
   spawnGrace: number;
 };
 
-const MAX_BULLETS = 260;
+const MAX_BULLETS = 520;
 
 export type FireRequest = {
   origin: THREE.Vector3;

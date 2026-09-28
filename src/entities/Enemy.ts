@@ -28,12 +28,16 @@ export type Enemy = {
   armed: boolean;
 };
 
+export type EnemyScale = { hp: number; damage: number };
+
 /**
- * Distinct silhouettes + warm hazard palette so they never blend into cool city geometry.
+ * Distinct silhouettes + warm hazard palette. Visual groups are pooled per kind.
  */
 export class EnemyManager {
   readonly group = new THREE.Group();
   readonly enemies: Enemy[] = [];
+  private readonly freeGroups = new Map<EnemyKind, THREE.Group[]>();
+  private readonly freeEnemies: Enemy[] = [];
 
   private readonly materials = {
     bodyHot: new THREE.MeshStandardMaterial({
@@ -97,10 +101,8 @@ export class EnemyManager {
     blade: new THREE.BoxGeometry(0.42, 0.04, 0.1),
   };
 
-  spawn(kind: EnemyKind, position: THREE.Vector3): Enemy {
-    const stats = ENEMIES[kind];
+  private buildVisual(kind: EnemyKind): THREE.Group {
     const group = new THREE.Group();
-
     const mat =
       kind === 'striker' || kind === 'sniper'
         ? this.materials.bodyViolet
@@ -117,7 +119,6 @@ export class EnemyManager {
     body.position.y = bodyY;
     group.add(body);
 
-    // Distinct silhouettes
     if (kind === 'drone' || kind === 'swarm') {
       const spikeCount = kind === 'swarm' ? 3 : 4;
       for (let i = 0; i < spikeCount; i++) {
@@ -196,6 +197,31 @@ export class EnemyManager {
       group.add(halo);
     }
 
+    return group;
+  }
+
+  private obtainGroup(kind: EnemyKind): THREE.Group {
+    const list = this.freeGroups.get(kind);
+    const reused = list?.pop();
+    if (reused) {
+      reused.visible = true;
+      reused.position.set(0, 0, 0);
+      reused.rotation.set(0, 0, 0);
+      reused.scale.setScalar(1);
+      return reused;
+    }
+    return this.buildVisual(kind);
+  }
+
+  private releaseGroup(kind: EnemyKind, group: THREE.Group): void {
+    group.visible = false;
+    if (!this.freeGroups.has(kind)) this.freeGroups.set(kind, []);
+    this.freeGroups.get(kind)!.push(group);
+  }
+
+  spawn(kind: EnemyKind, position: THREE.Vector3, scale: EnemyScale = { hp: 1, damage: 1 }): Enemy {
+    const stats = ENEMIES[kind];
+    const group = this.obtainGroup(kind);
     group.position.copy(position);
     group.position.y = 0;
     this.group.add(group);
@@ -209,22 +235,41 @@ export class EnemyManager {
             ? ENEMIES.sniper.fireCooldown
             : 0;
 
-    const enemy: Enemy = {
-      group,
-      kind,
-      health: stats.health,
-      maxHealth: stats.health,
-      speed: stats.speed,
-      damage: stats.damage,
-      score: stats.score,
-      radius: stats.radius,
-      fireCooldown,
-      fireTimer: fireCooldown * 0.5,
-      alive: true,
-      hitFlash: 0,
-      orbitPhase: (position.x * 0.17 + position.z * 0.29) % (Math.PI * 2),
-      armed: kind !== 'bomber',
-    };
+    let enemy = this.freeEnemies.pop();
+    if (!enemy) {
+      enemy = {
+        group,
+        kind,
+        health: 1,
+        maxHealth: 1,
+        speed: 1,
+        damage: 1,
+        score: 1,
+        radius: 1,
+        fireCooldown: 0,
+        fireTimer: 0,
+        alive: true,
+        hitFlash: 0,
+        orbitPhase: 0,
+        armed: true,
+      };
+    }
+
+    enemy.group = group;
+    enemy.kind = kind;
+    enemy.health = stats.health * scale.hp;
+    enemy.maxHealth = enemy.health;
+    enemy.speed = stats.speed * (1 + Math.min(0.35, (scale.hp - 1) * 0.08));
+    enemy.damage = stats.damage * scale.damage;
+    enemy.score = stats.score;
+    enemy.radius = stats.radius;
+    enemy.fireCooldown = fireCooldown;
+    enemy.fireTimer = fireCooldown * 0.5;
+    enemy.alive = true;
+    enemy.hitFlash = 0;
+    enemy.orbitPhase = (position.x * 0.17 + position.z * 0.29) % (Math.PI * 2);
+    enemy.armed = kind !== 'bomber';
+
     this.enemies.push(enemy);
     return enemy;
   }
@@ -268,9 +313,6 @@ export class EnemyManager {
         const dir = distance > preferred + 1 ? 1 : distance < preferred - 1 ? -1 : 0;
         enemy.group.position.addScaledVector(toPlayer, enemy.speed * dir * delta);
         enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
-      } else if (enemy.kind === 'bomber') {
-        // rush the player, then the game will detonate on contact
-        enemy.group.position.addScaledVector(toPlayer, enemy.speed * delta);
       } else {
         enemy.group.position.addScaledVector(toPlayer, enemy.speed * delta);
       }
@@ -297,7 +339,9 @@ export class EnemyManager {
       const enemy = this.enemies[i];
       if (!enemy.alive) {
         this.group.remove(enemy.group);
+        this.releaseGroup(enemy.kind, enemy.group);
         this.enemies.splice(i, 1);
+        this.freeEnemies.push(enemy);
       }
     }
   }
@@ -305,6 +349,8 @@ export class EnemyManager {
   clear(): void {
     for (const enemy of this.enemies) {
       this.group.remove(enemy.group);
+      this.releaseGroup(enemy.kind, enemy.group);
+      this.freeEnemies.push(enemy);
     }
     this.enemies.length = 0;
   }
@@ -313,8 +359,24 @@ export class EnemyManager {
     return this.enemies.filter((e) => e.alive).length;
   }
 
+  get poolStats(): { live: number; freeGroups: number; freeRecords: number } {
+    let freeGroups = 0;
+    this.freeGroups.forEach((list) => {
+      freeGroups += list.length;
+    });
+    return { live: this.enemies.length, freeGroups, freeRecords: this.freeEnemies.length };
+  }
+
   dispose(): void {
     this.clear();
+    this.freeGroups.forEach((list) => {
+      for (const g of list) {
+        // shared geometries are disposed below; only unique one-off meshes need care
+        this.group.remove(g);
+      }
+    });
+    this.freeGroups.clear();
+    this.freeEnemies.length = 0;
     Object.values(this.geometries).forEach((g) => g.dispose());
     Object.values(this.materials).forEach((m) => m.dispose());
   }

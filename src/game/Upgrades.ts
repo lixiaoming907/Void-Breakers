@@ -348,7 +348,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   shieldRegen: {
     id: 'shieldRegen',
     name: '护盾回充',
-    description: '每秒回复 2.2 点护盾。',
+    description: '每秒回复 1.2 点护盾。',
     tag: '生存',
     maxStacks: 4,
   },
@@ -789,7 +789,7 @@ export function applyUpgrade(
       stats.maxShieldBonus += 22;
       break;
     case 'shieldRegen':
-      stats.shieldRegenPerSec += 2.2;
+      stats.shieldRegenPerSec += 1.2;
       break;
     case 'maxHealth':
       stats.maxHealthBonus += 18;

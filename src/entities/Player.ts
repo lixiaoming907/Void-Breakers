@@ -163,7 +163,10 @@ export class Player {
     s.fireCooldown = Math.max(0, s.fireCooldown - delta);
 
     if (stats && stats.shieldRegenPerSec > 0 && s.shield < s.maxShield) {
+      // slower passive trickle so late waves still threaten
       s.shield = Math.min(s.maxShield, s.shield + stats.shieldRegenPerSec * delta);
+    } else if (s.shield > 0 && s.shield < s.maxShield) {
+      s.shield = Math.min(s.maxShield, s.shield + 0.35 * delta);
     }
 
     this.move.copy(input.move);

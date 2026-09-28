@@ -19,8 +19,12 @@ export class CameraRig {
     this.camera.lookAt(this.currentLook);
   }
 
+  /**
+   * amount 0.02–0.06 = micro (bullet hits)
+   * amount 0.25–0.9  = major (boss death, wave clear)
+   */
   addShake(amount: number): void {
-    this.shake = Math.min(1.2, this.shake + amount);
+    this.shake = Math.min(1.0, this.shake + amount);
   }
 
   update(delta: number, target: THREE.Vector3, lag: number, elapsed: number): void {
@@ -31,20 +35,20 @@ export class CameraRig {
     const lookTarget = target.clone().add(this.lookOffset);
     this.currentLook.lerp(lookTarget, t);
 
-    this.shake = Math.max(0, this.shake - delta * 2.8);
-    this.shakeSeed += delta * 40;
-    const shakeAmp = this.shake * 0.28;
+    this.shake = Math.max(0, this.shake - delta * 3.4);
+    this.shakeSeed += delta * 36;
+    // overall amplitude cut — long sessions should not cause motion sickness
+    const shakeAmp = this.shake * 0.12;
     const ox = Math.sin(this.shakeSeed * 1.7) * shakeAmp;
-    const oy = Math.cos(this.shakeSeed * 2.3) * shakeAmp * 0.6;
-    const oz = Math.sin(this.shakeSeed * 1.1) * shakeAmp * 0.5;
+    const oy = Math.cos(this.shakeSeed * 2.3) * shakeAmp * 0.55;
+    const oz = Math.sin(this.shakeSeed * 1.1) * shakeAmp * 0.45;
 
     this.camera.position.x += ox;
     this.camera.position.y += oy;
     this.camera.position.z += oz;
     this.camera.lookAt(this.currentLook);
 
-    // Subtle FOV pulse with speed feel
-    const targetFov = 48 + this.shake * 4;
+    const targetFov = 48 + this.shake * 2.2;
     this.camera.fov = THREE.MathUtils.damp(this.camera.fov, targetFov, 6, delta);
     this.camera.updateProjectionMatrix();
     void elapsed;

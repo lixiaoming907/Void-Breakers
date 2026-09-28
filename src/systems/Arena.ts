@@ -9,7 +9,6 @@ export class Arena {
   readonly group = new THREE.Group();
   private readonly stars: THREE.Points;
   private readonly grid: THREE.GridHelper;
-  private readonly crystals: THREE.Mesh[] = [];
   private readonly signs: THREE.Mesh[] = [];
   private readonly rain: THREE.Points;
   private rainPositions: Float32Array;
@@ -150,27 +149,7 @@ export class Arena {
       this.group.add(mesh);
     }
 
-    // Cool crystal pylons (purple/cyan — environment only)
-    const crystalMat = new THREE.MeshStandardMaterial({
-      color: '#2a1a55',
-      emissive: '#7b2dff',
-      emissiveIntensity: 0.85,
-      roughness: 0.18,
-      metalness: 0.55,
-      transparent: true,
-      opacity: 0.88,
-    });
-    const crystalGeo = new THREE.OctahedronGeometry(0.65, 0);
-    for (let i = 0; i < 22; i++) {
-      const mesh = new THREE.Mesh(crystalGeo, crystalMat);
-      const angle = (i / 22) * Math.PI * 2;
-      const radius = 22 + (i % 3) * 3.2;
-      mesh.position.set(Math.cos(angle) * radius, 1.4 + (i % 4) * 0.5, Math.sin(angle) * radius * 0.7);
-      mesh.rotation.set(Math.random(), Math.random(), Math.random());
-      mesh.scale.setScalar(0.65 + (i % 3) * 0.2);
-      this.crystals.push(mesh);
-      this.group.add(mesh);
-    }
+    // Purple crystal pylons removed — they blocked the combat read.
 
     // Neon floor guide rails
     const railMat = new THREE.MeshStandardMaterial({
@@ -261,11 +240,6 @@ export class Arena {
   update(delta: number, elapsed: number): void {
     this.stars.rotation.y = elapsed * 0.004;
     this.grid.material.opacity = 0.32 + Math.sin(elapsed * 1.5) * 0.1;
-
-    this.crystals.forEach((crystal, i) => {
-      crystal.rotation.y += delta * (0.15 + (i % 5) * 0.04);
-      crystal.position.y += Math.sin(elapsed * 1.1 + i) * delta * 0.12;
-    });
 
     this.signs.forEach((sign, i) => {
       const mat = sign.material as THREE.MeshBasicMaterial;
