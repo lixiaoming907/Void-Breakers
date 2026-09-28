@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COLORS } from '../game/constants';
+import { HDR } from '../game/palette';
 
 export type PickupKind = 'health' | 'shield' | 'rapid' | 'score';
 
@@ -19,10 +19,17 @@ const GEOMETRIES: Record<PickupKind, THREE.BufferGeometry> = {
 };
 
 const COLORS_MAP: Record<PickupKind, string> = {
-  health: COLORS.health,
-  shield: COLORS.shield,
-  rapid: COLORS.rapid,
-  score: COLORS.score,
+  health: HDR.pickupHealth,
+  shield: HDR.pickupShield,
+  rapid: HDR.pickupRapid,
+  score: HDR.pickupScore,
+};
+
+const EMISSIVE_MUL: Record<PickupKind, number> = {
+  health: HDR.pickupEmissiveMul.health,
+  shield: HDR.pickupEmissiveMul.shield,
+  rapid: HDR.pickupEmissiveMul.rapid,
+  score: HDR.pickupEmissiveMul.score,
 };
 
 export class PickupManager {
@@ -31,15 +38,13 @@ export class PickupManager {
   private readonly materials = new Map<PickupKind, THREE.MeshStandardMaterial>();
 
   constructor() {
-    // Unified HDR intensity (slightly under the old amber boost)
-    const UNIFIED_EMISSIVE = 0.95;
     (Object.keys(COLORS_MAP) as PickupKind[]).forEach((kind) => {
       this.materials.set(
         kind,
         new THREE.MeshStandardMaterial({
           color: COLORS_MAP[kind],
           emissive: COLORS_MAP[kind],
-          emissiveIntensity: UNIFIED_EMISSIVE,
+          emissiveIntensity: HDR.pickupEmissive * EMISSIVE_MUL[kind],
           roughness: 0.32,
           metalness: 0.35,
         }),

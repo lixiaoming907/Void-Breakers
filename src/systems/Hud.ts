@@ -32,6 +32,9 @@ const WEAPON_LABEL: Record<string, string> = {
   plasma: '等离子',
   railgun: '磁轨',
   flak: '高射',
+  lance: '光矛',
+  ricochet: '弹射',
+  swarm: '蜂群',
 };
 
 const SECONDARY_LABEL: Record<string, string> = {

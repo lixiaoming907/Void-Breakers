@@ -19,6 +19,7 @@ export type Bullet = {
   splitCount: number;
   splitDamage: number;
   spawnGrace: number;
+  bounces: number;
 };
 
 const MAX_BULLETS = 520;
@@ -106,6 +107,7 @@ export class BulletPool {
         splitCount: 5,
         splitDamage: 0.45,
         spawnGrace: 0,
+        bounces: 0,
       });
     }
   }
@@ -206,6 +208,50 @@ export class BulletPool {
         }
         break;
       }
+      case 'lance': {
+        // wide piercing beam
+        const width = req.weaponTurn; // reused as width factor
+        for (let i = 0; i < Math.max(1, shots); i++) {
+          const offset = (i - (Math.max(1, shots) - 1) / 2) * 0.1;
+          const d = dir.clone().addScaledVector(right, offset).normalize();
+          this.spawn('player', req.origin, d, dmgMul * 3.1, req.speed * 1.7, 0.85, {
+            pierce: req.pierce + 6 + req.weaponPierce,
+            radius: 0.22 * width,
+            crit: req.crit,
+          });
+        }
+        break;
+      }
+      case 'ricochet': {
+        for (let i = 0; i < shots; i++) {
+          const offset = (i - (shots - 1) / 2) * 0.12;
+          const d = dir.clone().addScaledVector(right, offset).normalize();
+          this.spawn('player', req.origin, d, dmgMul * 1.15, req.speed * req.weaponLife, 1.8, {
+            pierce: 0,
+            radius: 0.16,
+            crit: req.crit,
+            bounces: req.weaponExtra + 1,
+          });
+        }
+        break;
+      }
+      case 'swarm': {
+        const darts = 4 + req.multishot + req.weaponExtra;
+        for (let i = 0; i < darts; i++) {
+          const t = darts <= 1 ? 0 : (i / (darts - 1)) * 2 - 1;
+          const d = dir
+            .clone()
+            .addScaledVector(right, t * 0.55)
+            .normalize();
+          this.spawn('player', req.origin, d, dmgMul * 0.55, req.speed * 0.55, 2.8, {
+            pierce: 0,
+            homing: 3.2 * req.weaponTurn,
+            radius: 0.12,
+            crit: req.crit,
+          });
+        }
+        break;
+      }
       case 'pulse':
       default: {
         for (let i = 0; i < shots; i++) {
@@ -258,6 +304,7 @@ export class BulletPool {
       crit?: boolean;
       splitCount?: number;
       splitDamage?: number;
+      bounces?: number;
     } = {},
   ): void {
     const bullet = this.bullets.find((b) => !b.active) ?? this.recycleOldest();
@@ -274,6 +321,7 @@ export class BulletPool {
     bullet.crit = opts.crit ?? false;
     bullet.splitCount = opts.splitCount ?? 5;
     bullet.splitDamage = opts.splitDamage ?? 0.45;
+    bullet.bounces = opts.bounces ?? 0;
     bullet.velocity.copy(direction);
     if (bullet.velocity.lengthSq() < 1e-8) bullet.velocity.set(0, 0, -1);
     bullet.velocity.normalize().multiplyScalar(speed);
@@ -408,6 +456,21 @@ export class BulletPool {
     }
     bullet.active = false;
     bullet.mesh.visible = false;
+  }
+
+  /** Ricochet: retarget a bullet toward a nearby enemy after a hit. */
+  bounce(bullet: Bullet, target: { x: number; z: number }, speed: number): boolean {
+    if (bullet.bounces <= 0) return false;
+    bullet.bounces -= 1;
+    bullet.pierce = Math.max(bullet.pierce, 0);
+    const dir = new THREE.Vector3(target.x - bullet.mesh.position.x, 0, target.z - bullet.mesh.position.z);
+    if (dir.lengthSq() < 1e-6) return false;
+    dir.normalize();
+    bullet.velocity.copy(dir).multiplyScalar(speed);
+    bullet.life = Math.max(bullet.life, 1.2);
+    bullet.spawnGrace = 0.03;
+    bullet.mesh.lookAt(bullet.mesh.position.clone().add(dir));
+    return true;
   }
 
   getActive(kind?: BulletKind): Bullet[] {

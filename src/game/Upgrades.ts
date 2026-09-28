@@ -4,7 +4,10 @@ export type WeaponId =
   | 'homing'
   | 'plasma'
   | 'railgun'
-  | 'flak';
+  | 'flak'
+  | 'lance'
+  | 'ricochet'
+  | 'swarm';
 
 export type SecondaryId = 'orbit' | 'missilePod' | 'nova' | 'turret';
 
@@ -46,6 +49,15 @@ export type UpgradeId =
   | 'wFlakCluster'
   | 'wFlakFragDmg'
   | 'wFlakLife'
+  | 'wLanceCharge'
+  | 'wLanceWidth'
+  | 'wLanceDmg'
+  | 'wRicochetBounce'
+  | 'wRicochetDmg'
+  | 'wRicochetSpeed'
+  | 'wSwarmDarts'
+  | 'wSwarmTurn'
+  | 'wSwarmDmg'
   // secondary buffs
   | 'sOrbitDmg'
   | 'sOrbitCount'
@@ -110,6 +122,15 @@ export type PlayerStats = {
   flakCluster: number;
   flakDmg: number;
   flakLife: number;
+  lanceCharge: number;
+  lanceWidth: number;
+  lanceDmg: number;
+  ricochetBounce: number;
+  ricochetDmg: number;
+  ricochetSpeed: number;
+  swarmDarts: number;
+  swarmTurn: number;
+  swarmDmg: number;
 };
 
 export type SecondaryStats = {
@@ -195,6 +216,9 @@ export const WEAPON_FIRE_RATE: Record<WeaponId, number> = {
   plasma: 0.55,
   railgun: 0.45,
   flak: 0.78,
+  lance: 0.38,
+  ricochet: 0.92,
+  swarm: 0.58,
 };
 
 export function defaultStats(): PlayerStats {
@@ -233,6 +257,15 @@ export function defaultStats(): PlayerStats {
     flakCluster: 0,
     flakDmg: 1,
     flakLife: 1,
+    lanceCharge: 1,
+    lanceWidth: 1,
+    lanceDmg: 1,
+    ricochetBounce: 1,
+    ricochetDmg: 1,
+    ricochetSpeed: 1,
+    swarmDarts: 0,
+    swarmTurn: 1,
+    swarmDmg: 1,
   };
 }
 
@@ -284,6 +317,30 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     tag: '武器',
     maxStacks: 1,
     weapon: 'flak',
+  },
+  lance: {
+    id: 'lance',
+    name: '光矛',
+    description: '粗高能光束，贯穿直线上的所有敌人。',
+    tag: '武器',
+    maxStacks: 1,
+    weapon: 'lance',
+  },
+  ricochet: {
+    id: 'ricochet',
+    name: '弹射手枪',
+    description: '子弹命中后弹向附近敌人。',
+    tag: '武器',
+    maxStacks: 1,
+    weapon: 'ricochet',
+  },
+  swarm: {
+    id: 'swarm',
+    name: '蜂群发射器',
+    description: '扇形放出大量追踪飞镖。',
+    tag: '武器',
+    maxStacks: 1,
+    weapon: 'swarm',
   },
   orbit: {
     id: 'orbit',
@@ -574,6 +631,78 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     maxStacks: 2,
     requiresWeapon: 'flak',
   },
+  wLanceCharge: {
+    id: 'wLanceCharge',
+    name: '超载电容',
+    description: '光矛射速 +40%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'lance',
+  },
+  wLanceWidth: {
+    id: 'wLanceWidth',
+    name: '光束扩束',
+    description: '光矛更宽、穿透 +1',
+    tag: '专属',
+    maxStacks: 2,
+    requiresWeapon: 'lance',
+  },
+  wLanceDmg: {
+    id: 'wLanceDmg',
+    name: '聚焦棱镜',
+    description: '光矛伤害 +40%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'lance',
+  },
+  wRicochetBounce: {
+    id: 'wRicochetBounce',
+    name: '多重弹射',
+    description: '弹射次数 +1',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'ricochet',
+  },
+  wRicochetDmg: {
+    id: 'wRicochetDmg',
+    name: '合金弹头',
+    description: '弹射手枪伤害 +30%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'ricochet',
+  },
+  wRicochetSpeed: {
+    id: 'wRicochetSpeed',
+    name: '磁轨加速',
+    description: '弹速 +15%、射速 +10%',
+    tag: '专属',
+    maxStacks: 2,
+    requiresWeapon: 'ricochet',
+  },
+  wSwarmDarts: {
+    id: 'wSwarmDarts',
+    name: '蜂群扩容',
+    description: '飞镖 +3',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'swarm',
+  },
+  wSwarmTurn: {
+    id: 'wSwarmTurn',
+    name: '神经制导',
+    description: '追踪更强、弹速 +12%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'swarm',
+  },
+  wSwarmDmg: {
+    id: 'wSwarmDmg',
+    name: '毒刺弹头',
+    description: '蜂群伤害 +35%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'swarm',
+  },
   // ---- secondary buffs ----
   sOrbitDmg: {
     id: 'sOrbitDmg',
@@ -768,6 +897,36 @@ export function applyUpgrade(
       case 'wFlakLife':
         stats.flakLife *= 1.4;
         stats.flakDmg *= 1.15;
+        break;
+      case 'wLanceCharge':
+        stats.lanceCharge *= 1.4;
+        break;
+      case 'wLanceWidth':
+        stats.lanceWidth *= 1.35;
+        stats.pierceBonus += 1;
+        break;
+      case 'wLanceDmg':
+        stats.lanceDmg *= 1.4;
+        break;
+      case 'wRicochetBounce':
+        stats.ricochetBounce += 1;
+        break;
+      case 'wRicochetDmg':
+        stats.ricochetDmg *= 1.3;
+        break;
+      case 'wRicochetSpeed':
+        stats.bulletSpeedMult *= 1.15;
+        stats.ricochetSpeed *= 1.1;
+        break;
+      case 'wSwarmDarts':
+        stats.swarmDarts += 3;
+        break;
+      case 'wSwarmTurn':
+        stats.swarmTurn *= 1.25;
+        stats.bulletSpeedMult *= 1.12;
+        break;
+      case 'wSwarmDmg':
+        stats.swarmDmg *= 1.35;
         break;
       default:
         break;
