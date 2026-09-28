@@ -19,7 +19,10 @@ export class SpatialHash {
   }
 
   clear(): void {
-    this.cells.clear();
+    // keep arrays alive for reuse — just reset lengths
+    this.cells.forEach((list) => {
+      list.length = 0;
+    });
   }
 
   insert(index: number, x: number, z: number): void {

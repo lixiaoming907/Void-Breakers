@@ -71,6 +71,26 @@ export class Hud {
   private readonly secondaryEl: HTMLElement;
   private readonly statsEl: HTMLElement;
 
+  // dirty-check caches — avoid layout/DOM writes every frame
+  private lastScore = '';
+  private lastCombo = '';
+  private lastWave = '';
+  private lastEnemies = '';
+  private lastStatus = '';
+  private lastWeapon = '';
+  private lastUpgrades = '';
+  private lastSecondary = '';
+  private lastStatsBlock = '';
+  private lastHealthText = '';
+  private lastHealthPct = -1;
+  private lastShieldPct = -1;
+  private lastDashPct = -1;
+  private lastRapidPct = -1;
+  private lastState: GameState | null = null;
+  private lastFinalScore = '';
+  private lastFinalWave = '';
+  private lastFinalBest = '';
+
   constructor() {
     this.root = this.get('#hud');
     this.scoreEl = this.get('#score-value');
@@ -151,36 +171,116 @@ export class Hud {
   update(snapshot: HudSnapshot, delta: number): void {
     void delta;
     const hpPct = (snapshot.health / snapshot.maxHealth) * 100;
-    this.healthFill.style.width = `${hpPct}%`;
-    this.healthText.textContent = `${Math.ceil(snapshot.health)}`;
-    this.shieldFill.style.width = `${(snapshot.shield / Math.max(1, snapshot.maxShield)) * 100}%`;
-    this.dashFill.style.width = `${Math.max(0, snapshot.dashReady) * 100}%`;
-    this.rapidFill.style.width = `${Math.min(100, snapshot.rapidTimer * 33)}%`;
+    const shieldPct = (snapshot.shield / Math.max(1, snapshot.maxShield)) * 100;
+    const dashPct = Math.max(0, snapshot.dashReady) * 100;
+    const rapidPct = Math.min(100, snapshot.rapidTimer * 33);
+    const healthText = String(Math.ceil(snapshot.health));
 
-    this.scoreEl.textContent = snapshot.score.toLocaleString();
-    this.comboEl.textContent = `x${snapshot.combo}`;
-    this.waveEl.textContent = String(snapshot.wave);
-    this.enemiesEl.textContent = String(snapshot.enemiesLeft);
-    this.statusEl.textContent = snapshot.banner || snapshot.waveLabel;
-    this.weaponEl.textContent = WEAPON_LABEL[snapshot.weapon ?? 'pulse'] ?? '脉冲';
-    this.upgradesEl.textContent = String(snapshot.upgradeCount ?? 0);
-    const secs = (snapshot.secondaries ?? []).map((id) => SECONDARY_LABEL[id] ?? id);
-    this.secondaryEl.textContent = secs.length > 0 ? secs.join(' · ') : '—';
-    if (snapshot.statsBlock) this.statsEl.innerHTML = snapshot.statsBlock;
+    if (this.lastHealthPct !== hpPct) {
+      this.lastHealthPct = hpPct;
+      this.healthFill.style.width = `${hpPct}%`;
+    }
+    if (this.lastHealthText !== healthText) {
+      this.lastHealthText = healthText;
+      this.healthText.textContent = healthText;
+    }
+    if (this.lastShieldPct !== shieldPct) {
+      this.lastShieldPct = shieldPct;
+      this.shieldFill.style.width = `${shieldPct}%`;
+    }
+    if (this.lastDashPct !== dashPct) {
+      this.lastDashPct = dashPct;
+      this.dashFill.style.width = `${dashPct}%`;
+    }
+    if (this.lastRapidPct !== rapidPct) {
+      this.lastRapidPct = rapidPct;
+      this.rapidFill.style.width = `${rapidPct}%`;
+    }
 
-    this.menu.classList.toggle('hidden', snapshot.state !== 'menu');
-    this.pause.classList.toggle('hidden', snapshot.state !== 'paused');
-    this.gameover.classList.toggle('hidden', snapshot.state !== 'gameover');
-    this.root.classList.toggle('dimmed', snapshot.state !== 'playing');
+    const scoreText = String(snapshot.score);
+    if (this.lastScore !== scoreText) {
+      this.lastScore = scoreText;
+      this.scoreEl.textContent = snapshot.score.toLocaleString();
+    }
+    const comboText = `x${snapshot.combo}`;
+    if (this.lastCombo !== comboText) {
+      this.lastCombo = comboText;
+      this.comboEl.textContent = comboText;
+    }
+    const waveText = String(snapshot.wave);
+    if (this.lastWave !== waveText) {
+      this.lastWave = waveText;
+      this.waveEl.textContent = waveText;
+    }
+    const enemiesText = String(snapshot.enemiesLeft);
+    if (this.lastEnemies !== enemiesText) {
+      this.lastEnemies = enemiesText;
+      this.enemiesEl.textContent = enemiesText;
+    }
+    const statusText = snapshot.banner || snapshot.waveLabel;
+    if (this.lastStatus !== statusText) {
+      this.lastStatus = statusText;
+      this.statusEl.textContent = statusText;
+    }
+    const weaponText = WEAPON_LABEL[snapshot.weapon ?? 'pulse'] ?? '脉冲';
+    if (this.lastWeapon !== weaponText) {
+      this.lastWeapon = weaponText;
+      this.weaponEl.textContent = weaponText;
+    }
+    const upgradesText = String(snapshot.upgradeCount ?? 0);
+    if (this.lastUpgrades !== upgradesText) {
+      this.lastUpgrades = upgradesText;
+      this.upgradesEl.textContent = upgradesText;
+    }
 
-    if (snapshot.state !== 'upgrade') {
-      this.upgrade.classList.add('hidden');
+    const secs = snapshot.secondaries;
+    let secondaryText = '—';
+    if (secs && secs.length > 0) {
+      secondaryText = '';
+      for (let i = 0; i < secs.length; i++) {
+        if (i > 0) secondaryText += ' · ';
+        secondaryText += SECONDARY_LABEL[secs[i]] ?? secs[i];
+      }
+    }
+    if (this.lastSecondary !== secondaryText) {
+      this.lastSecondary = secondaryText;
+      this.secondaryEl.textContent = secondaryText;
+    }
+
+    // stats panel only rebuilds when the HTML actually changes (pause menu)
+    const statsBlock = snapshot.statsBlock ?? '';
+    if (statsBlock && this.lastStatsBlock !== statsBlock) {
+      this.lastStatsBlock = statsBlock;
+      this.statsEl.innerHTML = statsBlock;
+    }
+
+    if (this.lastState !== snapshot.state) {
+      this.lastState = snapshot.state;
+      this.menu.classList.toggle('hidden', snapshot.state !== 'menu');
+      this.pause.classList.toggle('hidden', snapshot.state !== 'paused');
+      this.gameover.classList.toggle('hidden', snapshot.state !== 'gameover');
+      this.root.classList.toggle('dimmed', snapshot.state !== 'playing');
+      if (snapshot.state !== 'upgrade') {
+        this.upgrade.classList.add('hidden');
+      }
     }
 
     if (snapshot.state === 'gameover') {
-      this.finalScore.textContent = snapshot.score.toLocaleString();
-      this.finalWave.textContent = String(snapshot.wave);
-      this.finalBest.textContent = snapshot.highScore.toLocaleString();
+      const fs = String(snapshot.score);
+      if (this.lastFinalScore !== fs) {
+        this.lastFinalScore = fs;
+        this.finalScore.textContent = snapshot.score.toLocaleString();
+      }
+      const fw = String(snapshot.wave);
+      if (this.lastFinalWave !== fw) {
+        this.lastFinalWave = fw;
+        this.finalWave.textContent = fw;
+      }
+      const fb = String(snapshot.highScore);
+      if (this.lastFinalBest !== fb) {
+        this.lastFinalBest = fb;
+        this.finalBest.textContent = snapshot.highScore.toLocaleString();
+      }
     }
   }
 

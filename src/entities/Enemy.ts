@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { ENEMIES } from '../game/constants';
 
+const _toPlayer = new THREE.Vector3();
+const _strafe = new THREE.Vector3();
+
 export type EnemyKind =
   | 'drone'
   | 'striker'
@@ -294,27 +297,27 @@ export class EnemyManager {
         body.position.y = baseY + Math.sin(elapsed * 2.8 + enemy.orbitPhase) * 0.06;
       }
 
-      const toPlayer = new THREE.Vector3().subVectors(playerPos, enemy.group.position);
-      toPlayer.y = 0;
-      const distance = toPlayer.length();
-      if (distance > 0.01) toPlayer.normalize();
+      _toPlayer.subVectors(playerPos, enemy.group.position);
+      _toPlayer.y = 0;
+      const distance = _toPlayer.length();
+      if (distance > 0.01) _toPlayer.normalize();
 
       if (enemy.kind === 'striker' || enemy.kind === 'boss') {
         const preferred = enemy.kind === 'boss' ? 8.5 : 7.2;
         const dir = distance > preferred + 1.2 ? 1 : distance < preferred - 1.2 ? -1 : 0;
-        enemy.group.position.addScaledVector(toPlayer, enemy.speed * dir * delta);
-        const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
+        enemy.group.position.addScaledVector(_toPlayer, enemy.speed * dir * delta);
+        _strafe.set(-_toPlayer.z, 0, _toPlayer.x);
         enemy.group.position.addScaledVector(
-          strafe,
+          _strafe,
           Math.sin(elapsed * 1.1 + enemy.orbitPhase) * enemy.speed * 0.55 * delta,
         );
       } else if (enemy.kind === 'sniper') {
         const preferred = 12;
         const dir = distance > preferred + 1 ? 1 : distance < preferred - 1 ? -1 : 0;
-        enemy.group.position.addScaledVector(toPlayer, enemy.speed * dir * delta);
-        enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+        enemy.group.position.addScaledVector(_toPlayer, enemy.speed * dir * delta);
+        enemy.group.rotation.y = Math.atan2(_toPlayer.x, _toPlayer.z);
       } else {
-        enemy.group.position.addScaledVector(toPlayer, enemy.speed * delta);
+        enemy.group.position.addScaledVector(_toPlayer, enemy.speed * delta);
       }
 
       enemy.group.position.x = THREE.MathUtils.clamp(enemy.group.position.x, -54, 54);
@@ -356,7 +359,11 @@ export class EnemyManager {
   }
 
   get aliveCount(): number {
-    return this.enemies.filter((e) => e.alive).length;
+    let n = 0;
+    for (let i = 0; i < this.enemies.length; i++) {
+      if (this.enemies[i].alive) n += 1;
+    }
+    return n;
   }
 
   get poolStats(): { live: number; freeGroups: number; freeRecords: number } {

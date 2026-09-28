@@ -122,7 +122,8 @@ export class SecondarySystem {
         mesh.position.set(Math.cos(a) * r, 0.38 + Math.sin(elapsed * 3 + i) * 0.05, Math.sin(a) * r);
         mesh.rotation.x = Math.PI / 2;
         mesh.rotation.z = a;
-        for (const e of enemies) {
+        for (let ei = 0; ei < enemies.length; ei++) {
+          const e = enemies[ei];
           const dx = wx - e.x;
           const dz = wz - e.z;
           const hitR = e.radius + 0.28;
@@ -177,11 +178,14 @@ export class SecondarySystem {
       turretState.timer += delta;
       if (turretState.timer >= this.stats.turretCd) {
         let best: { x: number; z: number } | null = null;
-        let bestDist = this.stats.turretRange;
-        for (const e of enemies) {
-          const d = Math.hypot(e.x - playerPos.x, e.z - playerPos.z);
-          if (d < bestDist) {
-            bestDist = d;
+        let bestDistSq = this.stats.turretRange * this.stats.turretRange;
+        for (let ei = 0; ei < enemies.length; ei++) {
+          const e = enemies[ei];
+          const dx = e.x - playerPos.x;
+          const dz = e.z - playerPos.z;
+          const dSq = dx * dx + dz * dz;
+          if (dSq < bestDistSq) {
+            bestDistSq = dSq;
             best = { x: e.x, z: e.z };
           }
         }

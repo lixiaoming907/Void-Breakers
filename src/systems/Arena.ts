@@ -190,7 +190,8 @@ export class Arena {
     this.group.add(ring);
 
     // Data rain covering the FULL arena (was stuck in a 40x32 center patch)
-    const rainCount = 900;
+    // 900 CPU-updated points → 480 keeps the atmosphere without a per-frame buffer hog
+    const rainCount = 480;
     this.rainPositions = new Float32Array(rainCount * 3);
     const rainX = ARENA.halfWidth + 8;
     const rainZ = ARENA.halfDepth + 8;

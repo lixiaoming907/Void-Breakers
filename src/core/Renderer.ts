@@ -3,7 +3,8 @@ import * as THREE from 'three';
 export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    // EffectComposer renders to RTs — MSAA on the canvas target is wasted cost
+    antialias: false,
     alpha: false,
     powerPreference: 'high-performance',
   });
@@ -11,6 +12,7 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
+  // PCF is enough at 1024 — PCFSoft + 2048 was overkill for this arena
   renderer.shadowMap.type = THREE.PCFShadowMap;
   return renderer;
 }
@@ -18,7 +20,7 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
 export function resizeRenderer(
   renderer: THREE.WebGLRenderer,
   camera: THREE.PerspectiveCamera,
-  maxDpr = 2,
+  maxDpr = 1.5,
 ): boolean {
   const canvas = renderer.domElement;
   const width = Math.max(1, Math.floor(canvas.clientWidth));

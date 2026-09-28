@@ -24,6 +24,16 @@ export type Bullet = {
 
 const MAX_BULLETS = 520;
 
+// scratch vectors — hot paths must not allocate
+const _dir = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _desired = new THREE.Vector3();
+const _current = new THREE.Vector3();
+const _look = new THREE.Vector3();
+const _bounceDir = new THREE.Vector3();
+const _splitDir = new THREE.Vector3();
+
 export type FireRequest = {
   origin: THREE.Vector3;
   direction: THREE.Vector3;
@@ -47,6 +57,7 @@ export type FireRequest = {
 export class BulletPool {
   readonly group = new THREE.Group();
   private readonly bullets: Bullet[] = [];
+  private readonly free: Bullet[] = [];
   private readonly geoBolt = new THREE.SphereGeometry(0.12, 8, 8);
   private readonly geoMissile = new THREE.CapsuleGeometry(0.1, 0.35, 4, 8);
   private readonly geoPlasma = new THREE.IcosahedronGeometry(0.28, 1);
@@ -83,6 +94,8 @@ export class BulletPool {
     blending: THREE.AdditiveBlending,
   });
 
+  private playerAlive = 0;
+
   constructor() {
     for (let i = 0; i < MAX_BULLETS; i++) {
       const mesh = new THREE.Mesh(this.geoBolt, this.matPlayer);
@@ -91,7 +104,7 @@ export class BulletPool {
       glow.visible = false;
       mesh.add(glow);
       this.group.add(mesh);
-      this.bullets.push({
+      const bullet: Bullet = {
         mesh,
         velocity: new THREE.Vector3(),
         life: 0,
@@ -108,19 +121,45 @@ export class BulletPool {
         splitDamage: 0.45,
         spawnGrace: 0,
         bounces: 0,
-      });
+      };
+      this.bullets.push(bullet);
+      this.free.push(bullet);
+    }
+  }
+
+  get activePlayerCount(): number {
+    return this.playerAlive;
+  }
+
+  /** Zero-allocation walk over active player-side bullets. */
+  forEachPlayerBullet(fn: (b: Bullet) => void): void {
+    for (let i = 0; i < this.bullets.length; i++) {
+      const b = this.bullets[i];
+      if (!b.active) continue;
+      if (b.kind !== 'player' && b.kind !== 'player-frag' && b.kind !== 'player-plasma' && b.kind !== 'player-beam') {
+        continue;
+      }
+      fn(b);
+    }
+  }
+
+  /** Zero-allocation walk over active bullets of a kind. */
+  forEachKind(kind: BulletKind, fn: (b: Bullet) => void): void {
+    for (let i = 0; i < this.bullets.length; i++) {
+      const b = this.bullets[i];
+      if (!b.active || b.kind !== kind) continue;
+      fn(b);
     }
   }
 
   firePlayer(req: FireRequest): void {
-    let dir = req.direction.clone();
-    dir.y = 0;
-    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
-    dir.normalize();
-    const up = new THREE.Vector3(0, 1, 0);
-    const right = new THREE.Vector3().crossVectors(dir, up);
-    if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
-    else right.normalize();
+    _dir.copy(req.direction);
+    _dir.y = 0;
+    if (_dir.lengthSq() < 1e-6) _dir.set(0, 0, -1);
+    _dir.normalize();
+    _right.crossVectors(_dir, _up);
+    if (_right.lengthSq() < 1e-6) _right.set(1, 0, 0);
+    else _right.normalize();
     const shots = 1 + req.multishot + req.weaponMultishot;
     const dmgMul = req.damage * req.weaponDamageMult;
 
@@ -131,10 +170,10 @@ export class BulletPool {
         const spread = 0.38;
         for (let i = 0; i < pelletCount; i++) {
           const t = pelletCount <= 1 ? 0 : (i / (pelletCount - 1)) * 2 - 1;
-          const d = dir
-            .clone()
-            .addScaledVector(right, t * spread)
-            .addScaledVector(dir, (Math.random() - 0.5) * 0.08)
+          const d = _desired
+            .copy(_dir)
+            .addScaledVector(_right, t * spread)
+            .addScaledVector(_dir, (Math.random() - 0.5) * 0.08)
             .normalize();
           this.spawn('player', req.origin, d, dmgMul * 0.38, req.speed * 1.15, 0.72, {
             pierce: req.pierce + req.weaponPierce,
@@ -150,7 +189,7 @@ export class BulletPool {
       case 'homing': {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.35;
-          const d = dir.clone().addScaledVector(right, offset).normalize();
+          const d = _desired.copy(_dir).addScaledVector(_right, offset).normalize();
           this.spawn('player', req.origin, d, dmgMul * 1.7, req.speed * 0.38, 4.2 * req.weaponLife, {
             pierce: 0,
             homing: 5.2 * req.weaponTurn,
@@ -166,7 +205,7 @@ export class BulletPool {
 
       // ── 等离子：大能量球 + AOE ──
       case 'plasma': {
-        this.spawn('player-plasma', req.origin, dir, dmgMul * 2.2, req.speed * 0.48, 2.6 * req.weaponLife, {
+        this.spawn('player-plasma', req.origin, _dir, dmgMul * 2.2, req.speed * 0.48, 2.6 * req.weaponLife, {
           pierce: 0,
           explosive: true,
           radius: 0.36 * req.weaponTurn,
@@ -176,9 +215,9 @@ export class BulletPool {
         if (req.multishot + req.weaponExtra > 0) {
           const extras = req.multishot + req.weaponExtra;
           for (let i = 0; i < extras; i++) {
-            const d = dir
-              .clone()
-              .addScaledVector(right, (i % 2 === 0 ? 1 : -1) * 0.16 * (i + 1))
+            const d = _desired
+              .copy(_dir)
+              .addScaledVector(_right, (i % 2 === 0 ? 1 : -1) * 0.16 * (i + 1))
               .normalize();
             this.spawn('player-plasma', req.origin, d, dmgMul * 1.05, req.speed * 0.45, 2.2, {
               explosive: true,
@@ -195,7 +234,7 @@ export class BulletPool {
       case 'railgun': {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.14;
-          const d = dir.clone().addScaledVector(right, offset).normalize();
+          const d = _desired.copy(_dir).addScaledVector(_right, offset).normalize();
           this.spawn('player', req.origin, d, dmgMul * 3.0, req.speed * 1.15, 1.25, {
             pierce: req.pierce + 3 + req.weaponPierce,
             radius: 0.24,
@@ -211,7 +250,7 @@ export class BulletPool {
       case 'flak': {
         for (let i = 0; i < 2 + req.multishot + Math.floor(req.weaponExtra / 2); i++) {
           const t = i === 0 ? 0 : (i % 2 === 0 ? 1 : -1) * 0.16 * Math.ceil(i / 2);
-          const d = dir.clone().addScaledVector(right, t).normalize();
+          const d = _desired.copy(_dir).addScaledVector(_right, t).normalize();
           this.spawn('player-frag', req.origin, d, dmgMul * 0.7, req.speed * 0.9, 1.35 * req.weaponLife, {
             pierce: req.pierce,
             split: true,
@@ -231,7 +270,7 @@ export class BulletPool {
         const beams = Math.max(1, Math.min(shots, 3));
         for (let i = 0; i < beams; i++) {
           const offset = (i - (beams - 1) / 2) * 0.22 * width;
-          const d = dir.clone().addScaledVector(right, offset).normalize();
+          const d = _desired.copy(_dir).addScaledVector(_right, offset).normalize();
           this.spawn('player-beam', req.origin, d, dmgMul * 1.65, req.speed * 2.4, 0.42, {
             pierce: 40 + req.pierce + req.weaponPierce,
             radius: 0.42 * width,
@@ -247,7 +286,7 @@ export class BulletPool {
       case 'ricochet': {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.12;
-          const d = dir.clone().addScaledVector(right, offset).normalize();
+          const d = _desired.copy(_dir).addScaledVector(_right, offset).normalize();
           this.spawn('player', req.origin, d, dmgMul * 1.15, req.speed * req.weaponLife, 1.8, {
             pierce: 0,
             radius: 0.16,
@@ -265,14 +304,10 @@ export class BulletPool {
         for (let i = 0; i < darts; i++) {
           const t = darts <= 1 ? 0 : (i / (darts - 1)) * 2 - 1;
           const lateral = t * 0.72;
-          const d = dir
-            .clone()
-            .addScaledVector(right, lateral)
-            .normalize();
           // spawn with a sideways component so flight curves
-          const curveDir = d
-            .clone()
-            .addScaledVector(right, lateral * 0.45)
+          const curveDir = _desired
+            .copy(_dir)
+            .addScaledVector(_right, lateral * 1.45)
             .normalize();
           this.spawn('player', req.origin, curveDir, dmgMul * 0.32, req.speed * 0.78, 1.7, {
             pierce: 0,
@@ -291,7 +326,7 @@ export class BulletPool {
       default: {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.14;
-          const d = dir.clone().addScaledVector(right, offset).normalize();
+          const d = _desired.copy(_dir).addScaledVector(_right, offset).normalize();
           this.spawn('player', req.origin, d, dmgMul, req.speed, 1.35, {
             pierce: req.pierce,
             explosive: req.explosive,
@@ -306,17 +341,29 @@ export class BulletPool {
     void req.weaponRateHint;
   }
 
-  private recycleOldest(): Bullet | null {
+  private obtain(): Bullet | null {
+    const free = this.free.pop();
+    if (free) return free;
+    // pool exhausted — steal the oldest active bullet
     let oldest: Bullet | null = null;
     for (const b of this.bullets) {
       if (!b.active) return b;
       if (!oldest || b.life < oldest.life) oldest = b;
     }
-    if (oldest) {
-      oldest.active = false;
-      oldest.mesh.visible = false;
-    }
+    if (oldest) this.release(oldest);
     return oldest;
+  }
+
+  private release(bullet: Bullet): void {
+    if (!bullet.active) return;
+    if (this.isPlayerKind(bullet.kind)) this.playerAlive = Math.max(0, this.playerAlive - 1);
+    bullet.active = false;
+    bullet.mesh.visible = false;
+    this.free.push(bullet);
+  }
+
+  private isPlayerKind(kind: BulletKind): boolean {
+    return kind === 'player' || kind === 'player-frag' || kind === 'player-plasma' || kind === 'player-beam';
   }
 
   spawnEnemy(origin: THREE.Vector3, direction: THREE.Vector3, damage: number, speed: number): void {
@@ -348,7 +395,7 @@ export class BulletPool {
       beamWidth?: number;
     } = {},
   ): void {
-    const bullet = this.bullets.find((b) => !b.active) ?? this.recycleOldest();
+    const bullet = this.obtain();
     if (!bullet) return;
     bullet.active = true;
     bullet.kind = kind;
@@ -370,6 +417,7 @@ export class BulletPool {
     bullet.mesh.visible = true;
     // grace so bullets don't instantly collide with the firer's own hitbox / nearby husks
     bullet.spawnGrace = 0.06;
+    if (this.isPlayerKind(kind)) this.playerAlive += 1;
 
     const glow = bullet.mesh.children[0] as THREE.Mesh;
 
@@ -398,7 +446,8 @@ export class BulletPool {
       glow.visible = true;
       const w = opts.beamWidth ?? 1;
       bullet.mesh.scale.set(0.55 * w, 0.35, 14);
-      bullet.mesh.lookAt(origin.clone().add(direction));
+      _look.copy(origin).add(direction);
+      bullet.mesh.lookAt(_look);
     } else {
       // player projectiles — visual identity per weapon
       const vs = opts.visualScale ?? 1;
@@ -411,7 +460,8 @@ export class BulletPool {
         bullet.mesh.geometry = this.geoLaser;
         bullet.mesh.material = this.matLaser;
         bullet.mesh.scale.set(1.35 * vs, 1.35 * vs, 2.6 * vs);
-        bullet.mesh.lookAt(origin.clone().add(direction));
+        _look.copy(origin).add(direction);
+        bullet.mesh.lookAt(_look);
       } else if (opts.swarm) {
         bullet.mesh.geometry = this.geoFrag;
         bullet.mesh.material = this.matFrag;
@@ -427,12 +477,14 @@ export class BulletPool {
     }
 
     if (isHomingLike(bullet) || opts.missile || opts.rail || kind === 'player-beam') {
-      bullet.mesh.lookAt(bullet.mesh.position.clone().add(bullet.velocity));
+      _look.copy(bullet.mesh.position).add(bullet.velocity);
+      bullet.mesh.lookAt(_look);
     }
   }
 
   update(delta: number, enemyPositions: { x: number; z: number }[]): void {
-    for (const bullet of this.bullets) {
+    for (let i = 0; i < this.bullets.length; i++) {
+      const bullet = this.bullets[i];
       if (!bullet.active) continue;
       bullet.life -= delta;
       if (bullet.spawnGrace > 0) bullet.spawnGrace = Math.max(0, bullet.spawnGrace - delta);
@@ -440,8 +492,7 @@ export class BulletPool {
         if (bullet.split) {
           this.splitFrag(bullet);
         } else {
-          bullet.active = false;
-          bullet.mesh.visible = false;
+          this.release(bullet);
         }
         continue;
       }
@@ -449,24 +500,24 @@ export class BulletPool {
       if (bullet.homing > 0 && enemyPositions.length > 0) {
         let best: { x: number; z: number } | null = null;
         let bestDist = 14;
-        for (const t of enemyPositions) {
-          const d = Math.hypot(t.x - bullet.mesh.position.x, t.z - bullet.mesh.position.z);
+        for (let t = 0; t < enemyPositions.length; t++) {
+          const e = enemyPositions[t];
+          const dx = e.x - bullet.mesh.position.x;
+          const dz = e.z - bullet.mesh.position.z;
+          const d = Math.sqrt(dx * dx + dz * dz);
           if (d < bestDist) {
             bestDist = d;
-            best = t;
+            best = e;
           }
         }
         if (best) {
-          const desired = new THREE.Vector3(
-            best.x - bullet.mesh.position.x,
-            0,
-            best.z - bullet.mesh.position.z,
-          ).normalize();
-          const current = bullet.velocity.clone().normalize();
-          current.lerp(desired, Math.min(1, delta * bullet.homing));
+          _desired.set(best.x - bullet.mesh.position.x, 0, best.z - bullet.mesh.position.z).normalize();
+          _current.copy(bullet.velocity).normalize();
+          _current.lerp(_desired, Math.min(1, delta * bullet.homing));
           const speed = bullet.velocity.length();
-          bullet.velocity.copy(current.normalize().multiplyScalar(speed));
-          bullet.mesh.lookAt(bullet.mesh.position.clone().add(bullet.velocity));
+          bullet.velocity.copy(_current.normalize().multiplyScalar(speed));
+          _look.copy(bullet.mesh.position).add(bullet.velocity);
+          bullet.mesh.lookAt(_look);
         }
       }
 
@@ -482,26 +533,30 @@ export class BulletPool {
         bullet.mesh.position.y > 20
       ) {
         if (bullet.split) this.splitFrag(bullet);
-        else {
-          bullet.active = false;
-          bullet.mesh.visible = false;
-        }
+        else this.release(bullet);
       }
     }
   }
 
   private splitFrag(bullet: Bullet): void {
-    bullet.active = false;
-    bullet.mesh.visible = false;
-    const origin = bullet.mesh.position.clone();
+    const originX = bullet.mesh.position.x;
+    const originY = bullet.mesh.position.y;
+    const originZ = bullet.mesh.position.z;
+    const damage = bullet.damage;
+    const explosive = bullet.explosive;
+    const crit = bullet.crit;
     const n = Math.max(3, bullet.splitCount);
+    const splitDamage = bullet.splitDamage;
+    this.release(bullet);
     for (let i = 0; i < n; i++) {
       const angle = (i / n) * Math.PI * 2;
-      const dir = new THREE.Vector3(Math.cos(angle), 0.12, Math.sin(angle)).normalize();
-      this.spawn('player-frag', origin, dir, bullet.damage * bullet.splitDamage, 11, 0.55, {
+      _splitDir.set(Math.cos(angle), 0.12, Math.sin(angle)).normalize();
+      // reuse origin without cloning
+      _look.set(originX, originY, originZ);
+      this.spawn('player-frag', _look, _splitDir, damage * splitDamage, 11, 0.55, {
         radius: 0.11,
-        explosive: bullet.explosive,
-        crit: bullet.crit,
+        explosive,
+        crit,
       });
     }
   }
@@ -512,8 +567,7 @@ export class BulletPool {
       this.splitFrag(bullet);
       return;
     }
-    bullet.active = false;
-    bullet.mesh.visible = false;
+    this.release(bullet);
   }
 
   /** Ricochet: retarget a bullet toward a nearby enemy after a hit. */
@@ -521,40 +575,25 @@ export class BulletPool {
     if (bullet.bounces <= 0) return false;
     bullet.bounces -= 1;
     bullet.pierce = Math.max(bullet.pierce, 0);
-    const dir = new THREE.Vector3(target.x - bullet.mesh.position.x, 0, target.z - bullet.mesh.position.z);
-    if (dir.lengthSq() < 1e-6) return false;
-    dir.normalize();
-    bullet.velocity.copy(dir).multiplyScalar(speed);
+    _bounceDir.set(target.x - bullet.mesh.position.x, 0, target.z - bullet.mesh.position.z);
+    if (_bounceDir.lengthSq() < 1e-6) return false;
+    _bounceDir.normalize();
+    bullet.velocity.copy(_bounceDir).multiplyScalar(speed);
     bullet.life = Math.max(bullet.life, 1.2);
     bullet.spawnGrace = 0.03;
-    bullet.mesh.lookAt(bullet.mesh.position.clone().add(dir));
+    _look.copy(bullet.mesh.position).add(_bounceDir);
+    bullet.mesh.lookAt(_look);
     return true;
-  }
-
-  getActive(kind?: BulletKind): Bullet[] {
-    return this.bullets.filter((b) => b.active && (!kind || b.kind === kind));
-  }
-
-  /** All player-side bullets including frags and plasma. */
-  getPlayerBullets(): Bullet[] {
-    return this.bullets.filter(
-      (b) =>
-        b.active &&
-        (b.kind === 'player' ||
-          b.kind === 'player-frag' ||
-          b.kind === 'player-plasma' ||
-          b.kind === 'player-beam'),
-    );
   }
 
   clear(): void {
     for (const bullet of this.bullets) {
-      bullet.active = false;
-      bullet.mesh.visible = false;
+      if (bullet.active) this.release(bullet);
     }
   }
 
   dispose(): void {
+    this.clear();
     this.geoBolt.dispose();
     this.geoMissile.dispose();
     this.geoPlasma.dispose();

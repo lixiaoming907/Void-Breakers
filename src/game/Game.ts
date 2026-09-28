@@ -27,6 +27,21 @@ import { WaveSystem, playerDamageScale, waveStatScale } from '../systems/WaveSys
 import { SpatialHash, FrameBudget } from '../systems/SpatialHash';
 import { createSeededRandom, range, type SeededRandom } from '../utils/random';
 
+// scratch vectors for hot paths — avoid per-frame GC
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _origin = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _fireOrigin = new THREE.Vector3();
+const _fireDir = new THREE.Vector3();
+const _enemyOrigin = new THREE.Vector3();
+const _enemyDir = new THREE.Vector3();
+const _spread = new THREE.Vector3();
+const _axisY = new THREE.Vector3(0, 1, 0);
+const _explodePos = new THREE.Vector3();
+const _novaPos = new THREE.Vector3();
+
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -63,7 +78,8 @@ export class Game {
   private readonly tuning = {
     cameraLag: 0.12,
     exposure: 1.22,
-    maxDpr: 2,
+    // 2.0 + full-res bloom was the main GPU cost on mid-range GPUs
+    maxDpr: 1.5,
   };
 
   private state: GameState = 'menu';
@@ -93,6 +109,15 @@ export class Game {
   private selectedChoice = 0;
   private upgradesTaken = 0;
 
+  // reused per-frame buffers (avoid GC in the hot update path)
+  private readonly enemyPosBuf: { x: number; z: number; radius: number }[] = [];
+  private enemyPosCount = 0;
+  private secondaryIdsCache: string[] = [];
+  private secondaryIdsDirty = true;
+  private diagTick = 0;
+  private cachedStatsBlock = '';
+  private lastStatsHtml = '';
+
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
     this.renderer.toneMappingExposure = this.tuning.exposure;
@@ -116,7 +141,7 @@ export class Game {
     resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
     this.syncPostSize();
     this.installTestHooks();
-    this.publishDiagnostics();
+    this.publishDiagnostics(true);
     this.hud.update(this.snapshot(), 0);
   }
 
@@ -220,10 +245,35 @@ export class Game {
       this.fireWeapon();
     }
 
-    const enemyPos = this.enemies.enemies
-      .filter((e) => e.alive)
-      .map((e) => ({ x: e.group.position.x, z: e.group.position.z, radius: e.radius }));
-    this.bullets.update(delta, enemyPos.map((e) => ({ x: e.x, z: e.z })));
+    // rebuild shared enemy snapshot without allocating new arrays/objects
+    this.enemyPosCount = 0;
+    const enemyList = this.enemies.enemies;
+    for (let i = 0; i < enemyList.length; i++) {
+      const e = enemyList[i];
+      if (!e.alive) continue;
+      let slot = this.enemyPosBuf[this.enemyPosCount];
+      if (!slot) {
+        slot = { x: 0, z: 0, radius: 0 };
+        this.enemyPosBuf.push(slot);
+      }
+      slot.x = e.group.position.x;
+      slot.z = e.group.position.z;
+      slot.radius = e.radius;
+      this.enemyPosCount += 1;
+    }
+    if (this.enemyPosBuf.length > this.enemyPosCount) {
+      this.enemyPosBuf.length = this.enemyPosCount;
+    }
+
+    // spatial hash once per frame — used by bullets, orbit blades, explosions
+    this.enemyGrid.clear();
+    for (let i = 0; i < enemyList.length; i++) {
+      const e = enemyList[i];
+      if (e.alive) this.enemyGrid.insert(i, e.group.position.x, e.group.position.z);
+    }
+    this.explosionBudget.reset();
+
+    this.bullets.update(delta, this.enemyPosBuf);
     this.enemies.update(delta, this.reducedMotion ? 0 : elapsed, this.player.group.position);
 
     // secondaries
@@ -232,13 +282,17 @@ export class Game {
       elapsed,
       this.player.group.position,
       this.player.group.rotation.y,
-      enemyPos,
+      this.enemyPosBuf,
     );
     for (const hit of secEvents.orbitHits) {
       const dmg = hit.damage * playerDamageScale(this.waves.currentWave);
-      for (const enemy of this.enemies.enemies) {
-        if (!enemy.alive) continue;
-        if (Math.hypot(enemy.group.position.x - hit.x, enemy.group.position.z - hit.z) < enemy.radius + 0.2) {
+      const candidates = this.enemyGrid.query(hit.x, hit.z, 1.2, this.queryBuf);
+      for (let ci = 0; ci < candidates.length; ci++) {
+        const enemy = enemyList[candidates[ci]];
+        if (!enemy || !enemy.alive) continue;
+        const dx = enemy.group.position.x - hit.x;
+        const dz = enemy.group.position.z - hit.z;
+        if (dx * dx + dz * dz < (enemy.radius + 0.2) * (enemy.radius + 0.2)) {
           this.damageEnemy(enemy, dmg, false);
         }
       }
@@ -247,9 +301,9 @@ export class Game {
       const m = secEvents.missiles;
       for (let i = 0; i < m.count; i++) {
         const angle = (i / m.count) * Math.PI * 2;
-        const dir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+        const dir = _dir.set(Math.cos(angle), 0, Math.sin(angle));
         this.bullets.firePlayer({
-          origin: new THREE.Vector3(m.x, 0.45, m.z),
+          origin: _origin.set(m.x, 0.45, m.z),
           direction: dir,
           damage: m.damage * this.stats.damageMult * playerDamageScale(this.waves.currentWave),
           speed: 12,
@@ -270,7 +324,7 @@ export class Game {
       this.audio.shoot();
     }
     for (const nova of secEvents.novas) {
-      this.effects.shockwave(new THREE.Vector3(nova.x, 0, nova.z), '#00f5d4', nova.radius * 0.85, 0.4);
+      this.effects.shockwave(_novaPos.set(nova.x, 0, nova.z), '#00f5d4', nova.radius * 0.85, 0.4);
       this.cameraRig.addShake(0.05);
       this.postfx.pulse(1.05);
       for (const enemy of this.enemies.enemies) {
@@ -286,10 +340,10 @@ export class Game {
       }
     }
     for (const shot of secEvents.turretShots) {
-      const dir = new THREE.Vector3(shot.tx - shot.x, 0, shot.tz - shot.z);
+      const dir = _dir.set(shot.tx - shot.x, 0, shot.tz - shot.z);
       if (dir.lengthSq() < 0.001) continue;
       this.bullets.firePlayer({
-        origin: new THREE.Vector3(shot.x, 0.4, shot.z),
+        origin: _origin.set(shot.x, 0.4, shot.z),
         direction: dir,
         damage: shot.damage * this.stats.damageMult * playerDamageScale(this.waves.currentWave),
         speed: 20,
@@ -336,7 +390,7 @@ export class Game {
     if (!this.player.state.alive) {
       this.state = 'gameover';
       this.audio.gameOver();
-      this.effects.explosion(this.player.group.position.clone().setY(0.6), '#00e5ff', 1.8);
+      this.effects.explosion(_v1.copy(this.player.group.position).setY(0.6), '#00e5ff', 1.8);
       this.cameraRig.addShake(1.2);
       this.postfx.pulse(1.5);
       this.banner = '任务失败';
@@ -359,9 +413,9 @@ export class Game {
   }
 
   private fireWeapon(): void {
-    const origin = this.player.group.position.clone();
+    const origin = _fireOrigin.copy(this.player.group.position);
     origin.y = 0.42;
-    const dir = this.player.aimWorld.clone().sub(this.player.group.position);
+    const dir = _fireDir.copy(this.player.aimWorld).sub(this.player.group.position);
     dir.y = 0;
     if (dir.lengthSq() < 0.001) dir.set(0, 0, -1);
     dir.normalize();
@@ -465,7 +519,7 @@ export class Game {
     const key = new THREE.DirectionalLight('#e8f2ff', 2.9);
     key.position.set(-12, 20, 10);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(1024, 1024);
     key.shadow.camera.near = 1;
     key.shadow.camera.far = 55;
     key.shadow.camera.left = -22;
@@ -498,11 +552,10 @@ export class Game {
 
   private spawnEnemy(kind: EnemyKind, at?: THREE.Vector3): void {
     if (at) {
-      const p = at.clone();
-      p.y = 0;
-      p.x = THREE.MathUtils.clamp(p.x, -ARENA.halfWidth + 1, ARENA.halfWidth - 1);
-      p.z = THREE.MathUtils.clamp(p.z, -ARENA.halfDepth + 1, ARENA.halfDepth - 1);
-      this.enemies.spawn(kind, p, waveStatScale(this.waves.currentWave));
+      _v3.set(at.x, 0, at.z);
+      _v3.x = THREE.MathUtils.clamp(_v3.x, -ARENA.halfWidth + 1, ARENA.halfWidth - 1);
+      _v3.z = THREE.MathUtils.clamp(_v3.z, -ARENA.halfDepth + 1, ARENA.halfDepth - 1);
+      this.enemies.spawn(kind, _v3, waveStatScale(this.waves.currentWave));
       return;
     }
     const side = this.rng();
@@ -523,32 +576,23 @@ export class Game {
       z = range(this.rng, -ARENA.halfDepth + margin, ARENA.halfDepth - margin);
     }
 
-    const toPlayer = new THREE.Vector3().subVectors(
-      this.player.group.position,
-      new THREE.Vector3(x, 0, z),
-    );
+    const toPlayer = _v1.subVectors(this.player.group.position, _v2.set(x, 0, z));
     if (toPlayer.length() < 5) {
       x = THREE.MathUtils.clamp(x + Math.sign(x || 1) * 4, -ARENA.halfWidth + 1, ARENA.halfWidth - 1);
     }
 
-    this.enemies.spawn(kind, new THREE.Vector3(x, 0, z), waveStatScale(this.waves.currentWave));
+    this.enemies.spawn(kind, _v2.set(x, 0, z), waveStatScale(this.waves.currentWave));
   }
 
   private handleCollisions(delta: number): void {
     const playerPos = this.player.group.position;
     const playerRadius = PLAYER.radius;
 
-    // rebuild spatial hash once per frame
-    this.enemyGrid.clear();
+    // spatial hash + explosion budget already rebuilt at the top of the playing update
     const enemyList = this.enemies.enemies;
-    for (let i = 0; i < enemyList.length; i++) {
-      const e = enemyList[i];
-      if (e.alive) this.enemyGrid.insert(i, e.group.position.x, e.group.position.z);
-    }
-    this.explosionBudget.reset();
 
-    for (const bullet of this.bullets.getPlayerBullets()) {
-      if (bullet.spawnGrace > 0) continue;
+    this.bullets.forEachPlayerBullet((bullet) => {
+      if (bullet.spawnGrace > 0) return;
       const bx = bullet.mesh.position.x;
       const bz = bullet.mesh.position.z;
       const candidates = this.enemyGrid.query(bx, bz, 2.2, this.queryBuf);
@@ -570,24 +614,28 @@ export class Game {
           );
 
           if (bullet.explosive || bullet.kind === 'player-plasma') {
-            this.explodeAt(bullet.mesh.position.clone(), bullet.damage * 0.65, enemy, 0);
+            this.explodeAt(bullet.mesh.position, bullet.damage * 0.65, enemy, 0);
           }
 
           if (bullet.pierce > 0) {
             bullet.pierce -= 1;
           } else if (bullet.bounces > 0) {
-            // ricochet retarget
+            // ricochet retarget — reuse spatial hash instead of scanning all enemies
             let best: Enemy | null = null;
-            let bestDist = 10;
-            for (const e of enemyList) {
-              if (!e.alive || e === enemy) continue;
-              const d = Math.hypot(e.group.position.x - bx, e.group.position.z - bz);
-              if (d < bestDist) {
-                bestDist = d;
+            let bestDistSq = 100;
+            const near = this.enemyGrid.query(bx, bz, 10, this.queryBuf);
+            for (let ni = 0; ni < near.length; ni++) {
+              const e = enemyList[near[ni]];
+              if (!e || !e.alive || e === enemy) continue;
+              const ex = e.group.position.x - bx;
+              const ez = e.group.position.z - bz;
+              const dSq = ex * ex + ez * ez;
+              if (dSq < bestDistSq) {
+                bestDistSq = dSq;
                 best = e;
               }
             }
-            if (best && this.bullets.bounce(bullet, { x: best.group.position.x, z: best.group.position.z }, PLAYER.bulletSpeed * this.stats.bulletSpeedMult)) {
+            if (best && this.bullets.bounce(bullet, best.group.position, PLAYER.bulletSpeed * this.stats.bulletSpeedMult)) {
               // keep flying after bounce
             } else {
               this.bullets.consume(bullet, bullet.split);
@@ -597,22 +645,21 @@ export class Game {
           }
           this.audio.hit();
           if (killed) void killed;
-          break;
+          return;
         }
       }
-    }
+    });
 
-    for (const bullet of this.bullets.getActive('enemy')) {
+    this.bullets.forEachKind('enemy', (bullet) => {
       const dx = bullet.mesh.position.x - playerPos.x;
       const dz = bullet.mesh.position.z - playerPos.z;
       const distSq = dx * dx + dz * dz;
       if (distSq <= (playerRadius + 0.22) * (playerRadius + 0.22)) {
-        bullet.active = false;
-        bullet.mesh.visible = false;
+        this.bullets.consume(bullet, false);
         if (this.player.takeDamage(bullet.damage)) {
           this.audio.hurt();
           this.cameraRig.addShake(0.12);
-          this.effects.burst(playerPos.clone().setY(0.5), '#ff4d6d', 10, 5, 1);
+          this.effects.burst(playerPos, '#ff4d6d', 10, 5, 1);
           this.combo = 0;
           if (this.player.state.shield <= 0) {
             this.effects.shockwave(playerPos, '#4cc9f0', 2.2, 0.35);
@@ -620,7 +667,7 @@ export class Game {
           }
         }
       }
-    }
+    });
 
     for (const enemy of this.enemies.enemies) {
       if (!enemy.alive) continue;
@@ -635,16 +682,16 @@ export class Game {
           this.player.takeDamage(enemy.damage);
           this.audio.hurt();
           this.cameraRig.addShake(0.22);
-          this.effects.burst(playerPos.clone().setY(0.5), '#ff4d6d', 16, 7, 1.1);
+          this.effects.burst(_v1.copy(playerPos).setY(0.5), '#ff4d6d', 16, 7, 1.1);
           this.combo = 0;
           continue;
         }
         if (this.player.takeDamage(enemy.damage * 0.65)) {
           this.audio.hurt();
           this.cameraRig.addShake(0.15);
-          this.effects.burst(playerPos.clone().setY(0.5), '#ff4d6d', 10, 5, 1);
-          const push = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(3.2);
-          this.player.velocity.add(push);
+          this.effects.burst(_v1.copy(playerPos).setY(0.5), '#ff4d6d', 10, 5, 1);
+          _v1.set(dx, 0, dz).normalize().multiplyScalar(3.2);
+          this.player.velocity.add(_v1);
           if (this.player.state.shield <= 0) {
             this.effects.shockwave(playerPos, '#4cc9f0', 2.4, 0.35);
           }
@@ -658,8 +705,8 @@ export class Game {
       enemy.fireTimer -= delta;
       if (enemy.fireTimer > 0) continue;
       enemy.fireTimer = enemy.fireCooldown * (0.85 + this.rng() * 0.3);
-      const origin = enemy.group.position.clone().setY(0.55);
-      const dir = playerPos.clone().sub(origin);
+      const origin = _enemyOrigin.copy(enemy.group.position).setY(0.55);
+      const dir = _enemyDir.copy(playerPos).sub(origin);
       dir.y = 0;
       if (dir.lengthSq() < 0.01) continue;
       dir.normalize();
@@ -667,7 +714,7 @@ export class Game {
       this.bullets.spawnEnemy(origin, dir, enemy.damage, speed);
       if (enemy.kind === 'boss') {
         for (const angle of [-0.28, 0.28]) {
-          const spread = dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+          const spread = _spread.copy(dir).applyAxisAngle(_axisY, angle);
           this.bullets.spawnEnemy(origin, spread, enemy.damage * 0.7, speed * 0.92);
         }
       }
@@ -709,20 +756,27 @@ export class Game {
     if (this.explosionChain > 12) return;
     this.explosionChain += 1;
 
+    // snapshot — callers may share scratch vectors that recursion overwrites
+    const px = position.x;
+    const pz = position.z;
+
     const canVfx = this.explosionBudget.trySpend(1);
     if (canVfx) {
-      this.effects.explosion(position, '#00f5d4', 1.05);
+      _v1.set(px, 0.2, pz);
+      this.effects.explosion(_v1, '#00f5d4', 1.05);
       this.cameraRig.addShake(0.05);
       this.postfx.pulse(1.08);
     }
 
     const radius = 2.5;
-    const candidates = this.enemyGrid.query(position.x, position.z, radius, this.queryBuf);
+    const candidates = this.enemyGrid.query(px, pz, radius, this.queryBuf);
     const enemyList = this.enemies.enemies;
     for (let i = 0; i < candidates.length; i++) {
       const enemy = enemyList[candidates[i]];
       if (!enemy || !enemy.alive || enemy === source) continue;
-      const d = Math.hypot(enemy.group.position.x - position.x, enemy.group.position.z - position.z);
+      const dx = enemy.group.position.x - px;
+      const dz = enemy.group.position.z - pz;
+      const d = Math.sqrt(dx * dx + dz * dz);
       if (d < radius) {
         const falloff = 1 - (d / radius) * 0.45;
         // pass chain so death explosions do not snowball
@@ -740,8 +794,9 @@ export class Game {
     this.score += Math.floor(enemy.score * comboMult * (1 + this.waves.currentWave * 0.04));
     this.audio.explode();
     if (this.explosionBudget.trySpend(1)) {
+      _v1.copy(enemy.group.position).setY(0.55);
       this.effects.explosion(
-        enemy.group.position.clone().setY(0.55),
+        _v1,
         enemy.kind === 'boss' ? '#ff2e88' : '#ff4d6d',
         enemy.kind === 'boss' ? 1.7 : enemy.kind === 'swarm' ? 0.45 : 0.8,
       );
@@ -757,22 +812,23 @@ export class Game {
     // splitter: spawn smaller chasers
     if (enemy.kind === 'splitter') {
       for (let i = 0; i < 3; i++) {
-        const offset = new THREE.Vector3((this.rng() - 0.5) * 1.4, 0, (this.rng() - 0.5) * 1.4);
-        this.spawnEnemy('swarm', enemy.group.position.clone().add(offset));
+        _v2.set(enemy.group.position.x + (this.rng() - 0.5) * 1.4, 0, enemy.group.position.z + (this.rng() - 0.5) * 1.4);
+        this.spawnEnemy('swarm', _v2);
       }
     }
 
     // bomber death is an AOE (also on contact — handled in collisions)
     if (enemy.kind === 'bomber' && chain < 2) {
-      this.explodeAt(enemy.group.position.clone(), enemy.damage * 0.75, enemy, chain + 1);
+      _explodePos.copy(enemy.group.position);
+      this.explodeAt(_explodePos, enemy.damage * 0.75, enemy, chain + 1);
     }
 
     const roll = this.rng();
-    const pos = enemy.group.position.clone();
+    const pos = _v1.copy(enemy.group.position);
     if (enemy.kind === 'boss') {
       this.spawnPickup('shield', pos);
-      this.spawnPickup('rapid', pos.clone().add(new THREE.Vector3(1.2, 0, 0.6)));
-      this.spawnPickup('health', pos.clone().add(new THREE.Vector3(-1.2, 0, -0.6)));
+      this.spawnPickup('rapid', _v2.copy(pos).add(_v3.set(1.2, 0, 0.6)));
+      this.spawnPickup('health', _v2.copy(pos).add(_v3.set(-1.2, 0, -0.6)));
     } else if (roll < 0.1) {
       this.spawnPickup('health', pos);
     } else if (roll < 0.18) {
@@ -785,7 +841,7 @@ export class Game {
   }
 
   private spawnPickup(kind: PickupKind, position: THREE.Vector3): void {
-    const p = position.clone();
+    const p = _v2.copy(position);
     p.y = 0;
     p.x = THREE.MathUtils.clamp(p.x, -ARENA.halfWidth + 1, ARENA.halfWidth - 1);
     p.z = THREE.MathUtils.clamp(p.z, -ARENA.halfDepth + 1, ARENA.halfDepth - 1);
@@ -870,6 +926,7 @@ export class Game {
     const result = applyUpgrade(this.stats, this.secondaryStats, id, this.upgradeCounts);
     if (result.unlockedSecondary) {
       this.secondaries.unlock(result.unlockedSecondary);
+    this.secondaryIdsDirty = true;
     }
     this.secondaries.setStats(this.secondaryStats);
     this.player.setStats(this.stats);
@@ -903,6 +960,7 @@ export class Game {
     this.player.reset();
     this.player.setStats(this.stats);
     this.secondaries.reset();
+    this.secondaryIdsDirty = true;
     this.secondaries.setStats(this.secondaryStats);
     this.enemies.clear();
     this.bullets.clear();
@@ -920,6 +978,10 @@ export class Game {
 
   private snapshot(): HudSnapshot {
     const s = this.player.state;
+    if (this.secondaryIdsDirty) {
+      this.secondaryIdsCache = Array.from(this.secondaries.owned.keys());
+      this.secondaryIdsDirty = false;
+    }
     return {
       health: s.health,
       maxHealth: s.maxHealth,
@@ -941,14 +1003,21 @@ export class Game {
       bannerSub: this.bannerSub,
       weapon: this.stats.weapon,
       upgradeCount: this.upgradesTaken,
-      secondaries: Array.from(this.secondaries.owned.keys()),
-      statsBlock: this.buildStatsBlock(),
+      secondaries: this.secondaryIdsCache,
+      // pause panel only — avoid HTML string churn during play
+      statsBlock: this.state === 'paused' ? this.buildStatsBlock() : undefined,
     };
   }
 
   private buildStatsBlock(): string {
     const s = this.player.state;
     const st = this.stats;
+    // cheap dirty check — rebuild only when the rendered numbers change
+    const key = `${Math.ceil(s.health)}|${s.maxHealth}|${Math.ceil(s.shield)}|${s.maxShield}|${st.damageMult}|${st.fireRateMult}|${st.moveSpeedMult}|${st.bulletSpeedMult}|${st.critChance}|${st.critDamageMult}|${st.multishotBonus}|${st.pierceBonus}|${st.shieldRegenPerSec}|${st.weapon}|${this.player.getDashCooldownMax()}`;
+    if (key === this.cachedStatsBlock) {
+      return this.lastStatsHtml;
+    }
+    this.cachedStatsBlock = key;
     const rows: [string, string][] = [
       ['装甲', `${Math.ceil(s.health)} / ${s.maxHealth}`],
       ['护盾', `${Math.ceil(s.shield)} / ${s.maxShield}`],
@@ -963,9 +1032,12 @@ export class Game {
       ['护盾回充', `${st.shieldRegenPerSec.toFixed(1)}/s`],
       ['冲刺冷却', `${(this.player.getDashCooldownMax()).toFixed(2)}s`],
     ];
-    return rows
-      .map(([k, v]) => `<div class="stat-row"><span>${k}</span><strong>${v}</strong></div>`)
-      .join('');
+    let html = '';
+    for (let i = 0; i < rows.length; i++) {
+      html += `<div class="stat-row"><span>${rows[i][0]}</span><strong>${rows[i][1]}</strong></div>`;
+    }
+    this.lastStatsHtml = html;
+    return html;
   }
 
   private installTestHooks(): void {
@@ -988,7 +1060,7 @@ export class Game {
           const id = name.slice(5) as UpgradeId;
           this.applyUpgradeForTest(id);
           this.render();
-          this.publishDiagnostics();
+          this.publishDiagnostics(true);
           return { state: name };
         }
         if (name === 'menu') {
@@ -1023,7 +1095,7 @@ export class Game {
           }
         }
         this.render();
-        this.publishDiagnostics();
+        this.publishDiagnostics(true);
         return { state: name };
       },
       setPausedForScreenshot: (paused: boolean) => {
@@ -1033,7 +1105,7 @@ export class Game {
         this.reducedMotion = enabled;
         if (enabled) this.player.stabilizeVisuals();
         this.render();
-        this.publishDiagnostics();
+        this.publishDiagnostics(true);
       },
       hideDebugUi: () => {
         /* no debug gui in production */
@@ -1044,34 +1116,49 @@ export class Game {
   private applyUpgradeForTest(id: UpgradeId): void {
     const result = applyUpgrade(this.stats, this.secondaryStats, id, this.upgradeCounts);
     if (result.unlockedSecondary) this.secondaries.unlock(result.unlockedSecondary);
+    this.secondaryIdsDirty = true;
     this.secondaries.setStats(this.secondaryStats);
     this.player.setStats(this.stats);
     this.upgradesTaken += 1;
   }
 
-  private publishDiagnostics(): void {
+  private publishDiagnostics(force = false): void {
+    // throttle object churn — tests/smoke scripts call with force=true
+    if (!force) {
+      this.diagTick += 1;
+      if (this.diagTick % 4 !== 0) return;
+    }
     const info = this.renderer.info;
-    const snap = this.snapshot();
+    const s = this.player.state;
+    if (this.secondaryIdsDirty) {
+      this.secondaryIdsCache = Array.from(this.secondaries.owned.keys());
+      this.secondaryIdsDirty = false;
+    }
+    let secondaryJoin = '';
+    for (let i = 0; i < this.secondaryIdsCache.length; i++) {
+      if (i > 0) secondaryJoin += ',';
+      secondaryJoin += this.secondaryIdsCache[i];
+    }
     window.__THREE_GAME_DIAGNOSTICS__ = {
       frame: this.frame,
       elapsed: this.elapsed,
       score: this.score,
-      wave: snap.wave,
+      wave: this.waves.currentWave,
       state: this.state,
       complete: this.state === 'gameover',
       enemies: this.enemies.aliveCount,
-      bullets: this.bullets.getPlayerBullets().length,
+      bullets: this.bullets.activePlayerCount,
       weapon: this.stats.weapon,
       upgrades: this.upgradesTaken,
-      secondaries: Array.from(this.secondaries.owned.keys()).join(','),
-      shield: this.player.state.shield,
+      secondaries: secondaryJoin,
+      shield: s.shield,
       player: {
         position: {
           x: this.player.group.position.x,
           y: this.player.group.position.y,
           z: this.player.group.position.z,
         },
-        health: this.player.state.health,
+        health: s.health,
         speed: this.player.velocity.length(),
         yaw: this.player.group.rotation.y,
       },
