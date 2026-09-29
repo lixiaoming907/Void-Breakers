@@ -2,6 +2,8 @@
 
 霓虹虚空竞技场弹幕肉鸽射击游戏（Three.js + Vite）。
 
+**故事背景**：[docs/LORE.md](docs/LORE.md) — 虚空裂变、破阵场与蜂群编制。
+
 ## 运行
 
 ```bash
