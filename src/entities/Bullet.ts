@@ -302,8 +302,8 @@ export class BulletPool {
             crit: req.crit,
             visualScale: 1.15,
             explosive: true,
-            // primary missile boom: clearly above secondary missile (28)
-            boomDamage: dmgMul * 3.4,
+            // primary missile boom: 20x prior baseline so it actually kills
+            boomDamage: dmgMul * 68,
             aoe: 2.4 * req.weaponTurn,
           });
         }

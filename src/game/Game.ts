@@ -531,8 +531,8 @@ export class Game {
     });
 
     this.audio.shoot(s.weapon);
-    // tiny muzzle spark (not smoke)
-    this.effects.burst(origin, '#9ad8ff', 2, 1.8, 0.32);
+    // tiny muzzle ring
+    this.effects.shockwave(origin, '#7df9ff', 0.55, 0.12);
   }
 
   private createScene(): void {
@@ -659,11 +659,13 @@ export class Game {
         const distSq = dx * dx + dz * dz;
         const hitRadius = enemy.radius + bullet.radius + 0.12;
         if (distSq <= hitRadius * hitRadius) {
-          // ── 导弹：命中爆炸 ──
+          // ── 导弹：直击 + 范围爆炸（之前把命中者排除在外，等于没伤害）──
           if (bullet.kind === 'player-missile') {
+            const boom = bullet.boomDamage || bullet.damage * 68;
+            this.damageEnemy(enemy, boom, bullet.crit);
             this.explodeAt(
               bullet.mesh.position,
-              bullet.boomDamage || bullet.damage * 3.2,
+              boom * 0.55,
               enemy,
               0,
               bullet.aoe || 2.4,
@@ -674,13 +676,12 @@ export class Game {
           }
 
           const killed = this.damageEnemy(enemy, bullet.damage, bullet.crit);
-          // minimal impact flash (not smoke)
-          this.effects.burst(
+          // short expanding ring (not smoke)
+          this.effects.shockwave(
             bullet.mesh.position,
-            bullet.crit ? '#fee440' : '#9ad8ff',
-            2,
-            2.2,
-            0.35,
+            bullet.crit ? '#fee440' : '#7df9ff',
+            0.9,
+            0.18,
           );
 
           if (bullet.explosive) {
@@ -691,8 +692,8 @@ export class Game {
             bullet.pierce -= 1;
           } else if (bullet.bounces > 0 && bullet.kind === 'player-reflect') {
             let best: Enemy | null = null;
-            let bestDistSq = 120;
-            const near = this.enemyGrid.query(bx, bz, 11, this.queryBuf);
+            let bestDistSq = 22 * 22;
+            const near = this.enemyGrid.query(bx, bz, 22, this.queryBuf);
             for (let ni = 0; ni < near.length; ni++) {
               const e = enemyList[near[ni]];
               if (!e || !e.alive || e === enemy) continue;
@@ -831,9 +832,10 @@ export class Game {
 
     const canVfx = this.explosionBudget.trySpend(1);
     if (canVfx) {
-      // missile boom: small yellow smoke puff (not white)
-      _v1.set(px, 0.28, pz);
-      this.effects.burst(_v1, '#e8c86a', 7, 2.4, 1.15);
+      // missile boom: short yellow expanding ring (no smoke blob)
+      _v1.set(px, 0.12, pz);
+      this.effects.shockwave(_v1, '#e8c86a', radius * 1.15, 0.28);
+      this.effects.shockwave(_v1, '#ffb84d', radius * 0.7, 0.18);
       this.cameraRig.addShake(0.06);
       this.postfx.pulse(1.1);
     }
@@ -870,16 +872,14 @@ export class Game {
     if (!cheap || enemy.kind === 'boss') {
       this.audio.explode(enemy.kind === 'boss');
     }
-    // simple death puff — visible but not noisy
+    // short expanding fresnel-style rings (not smoke blobs)
     if (this.explosionBudget.trySpend(1)) {
-      _v1.copy(enemy.group.position).setY(0.55);
-      this.effects.burst(
-        _v1,
-        enemy.kind === 'boss' ? '#ff2e88' : '#ff6b7a',
-        enemy.kind === 'boss' ? 10 : enemy.kind === 'swarm' ? 3 : 5,
-        enemy.kind === 'boss' ? 5 : 3,
-        enemy.kind === 'boss' ? 1.1 : 0.55,
-      );
+      _v1.copy(enemy.group.position).setY(0.12);
+      const scale = enemy.kind === 'boss' ? 3.2 : enemy.kind === 'swarm' ? 0.7 : 1.25;
+      this.effects.shockwave(_v1, enemy.kind === 'boss' ? '#ff2e88' : '#ff6b9d', scale, 0.22);
+      if (enemy.kind === 'boss') {
+        this.effects.shockwave(_v1, '#ffffff', scale * 0.65, 0.16);
+      }
     }
     if (enemy.kind === 'boss') {
       this.cameraRig.addShake(0.85);
