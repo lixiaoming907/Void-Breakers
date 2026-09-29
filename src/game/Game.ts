@@ -13,6 +13,7 @@ import {
   defaultSecondaryStats,
   defaultStats,
   rollUpgradeChoices,
+  LANCE_HIT_WIDTH_MULT,
   UPGRADES,
   WEAPON_DAMAGE,
   type PlayerStats,
@@ -438,6 +439,8 @@ export class Game {
     // ── 光矛：瞬间出光，无飞行过程 ──
     if (s.weapon === 'lance') {
       const width = s.lanceWidth;
+      // visual stays slim; collision corridor is widened so the thin beam still connects
+      const hitWidth = width * LANCE_HIT_WIDTH_MULT;
       const beams = 1 + s.multishotBonus + (s.lanceWidth > 1.3 ? 1 : 0);
       const range = 48;
       for (let b = 0; b < Math.min(beams, 3); b++) {
@@ -464,7 +467,7 @@ export class Game {
           const along = ex * dir.x + ez * dir.z;
           if (along < 0 || along > range) continue;
           const side = Math.abs(ex * -dir.z + ez * dir.x);
-          if (side <= enemy.radius + 0.35 * width) {
+          if (side <= enemy.radius + 0.35 * hitWidth) {
             this.damageEnemy(enemy, damage * s.lanceDmg * WEAPON_DAMAGE.lanceHit, crit, 0);
             // pierce beam has no impact sprite — spark on each victim so hits read clearly
             if (hitFx < 12) {

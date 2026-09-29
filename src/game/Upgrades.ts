@@ -217,6 +217,13 @@ export const WEAPON_DAMAGE = {
   reflect: 1.05,
 } as const;
 
+/**
+ * 光矛命中判定宽度 = lanceWidth × 本系数。
+ * 视觉粗细不变；判定故意加宽，否则细光束很难打中。
+ * 例：lanceWidth=1 → 判定 3；叠 buff 到 2 → 判定 6。
+ */
+export const LANCE_HIT_WIDTH_MULT = 3;
+
 export function defaultStats(): PlayerStats {
   return {
     fireRateMult: 1,
