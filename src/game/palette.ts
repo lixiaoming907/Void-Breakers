@@ -15,10 +15,10 @@ export const HDR = {
 
   // 按色彩感知补偿（绿天然更亮）
   pickupEmissiveMul: {
-    health: 1.35,
+    health: 2.0,
     shield: 1.25,
-    rapid: 1.2,
-    score: 1.0,
+    rapid: 3.0,
+    score: 0.5,
   } as const,
 
   // —— 玩家 ——
@@ -77,7 +77,7 @@ export const HDR = {
   arenaNeonCyan: '#1de0ff',
   arenaNeonMagenta: '#f15bb5',
   arenaTrimEmissive: '#1de0ff',
-  arenaTrimIntensity: 0.9,
+  arenaTrimIntensity: 0.7,
 
   // —— 副武器 ——
   orbitBlade: '#7df9ff',

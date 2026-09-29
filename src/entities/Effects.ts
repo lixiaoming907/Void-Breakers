@@ -78,7 +78,7 @@ export class Effects {
     this.pointsMat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
       vertexShader: /* glsl */ `
         attribute float aSize;
         attribute float aAlpha;
@@ -100,7 +100,7 @@ export class Effects {
           float d = length(uv);
           if (d > 0.5) discard;
           float soft = smoothstep(0.5, 0.12, d);
-          gl_FragColor = vec4(vColor, vAlpha * soft);
+          gl_FragColor = vec4(vColor * 0.72, vAlpha * soft * 0.55);
         }
       `,
       vertexColors: true,
@@ -115,7 +115,7 @@ export class Effects {
       const material = new THREE.MeshBasicMaterial({
         color: '#7df9ff',
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.45,
         side: THREE.DoubleSide,
         depthWrite: false,
       });

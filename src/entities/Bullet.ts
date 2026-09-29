@@ -79,7 +79,7 @@ export class BulletPool {
   private readonly free: Bullet[] = [];
   private readonly geoBolt = new THREE.SphereGeometry(0.12, 8, 8);
   private readonly geoMissile = new THREE.CapsuleGeometry(0.11, 0.32, 4, 8);
-  private readonly geoBlackhole = new THREE.IcosahedronGeometry(0.32, 1);
+  private readonly geoBlackhole = new THREE.SphereGeometry(0.55, 24, 18);
   private readonly geoLaser = new THREE.BoxGeometry(0.08, 0.08, 0.7);
   private readonly geoReflect = new THREE.BoxGeometry(0.06, 0.06, 0.55);
   private readonly geoHoming = new THREE.ConeGeometry(0.12, 0.4, 6);
@@ -89,38 +89,61 @@ export class BulletPool {
   private readonly matCrit = new THREE.MeshBasicMaterial({ color: '#fee440' });
   private readonly matEnemy = new THREE.MeshBasicMaterial({ color: '#ff6b9d' });
   private readonly matHoming = new THREE.MeshBasicMaterial({ color: '#c77dff' });
-  private readonly matBlackhole = new THREE.MeshBasicMaterial({ color: '#b44dff' });
+  /** purple rim → black core */
+  private readonly matBlackhole = new THREE.ShaderMaterial({
+    transparent: true,
+    uniforms: {},
+    vertexShader: /* glsl */ `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vView = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        float fres = pow(1.0 - max(dot(normalize(vView), normalize(vNormal)), 0.0), 1.55);
+        vec3 core = vec3(0.012, 0.0, 0.03);
+        vec3 rim = vec3(0.706, 0.302, 1.0);
+        gl_FragColor = vec4(mix(core, rim, fres * 0.98), 0.94);
+      }
+    `,
+  });
   private readonly matMissile = new THREE.MeshBasicMaterial({ color: '#ff8c42' });
   private readonly matReflect = new THREE.MeshBasicMaterial({ color: '#2dff88' });
   private readonly matLance = new THREE.MeshBasicMaterial({
     color: '#4db8ff',
     transparent: true,
-    opacity: 0.95,
+    opacity: 0.9,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-
   private readonly glowGeo = new THREE.SphereGeometry(0.22, 8, 8);
   private readonly glowSoft = new THREE.MeshBasicMaterial({
     color: '#7df9ff',
     transparent: true,
-    opacity: 0.18,
+    opacity: 0.06,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
   private readonly glowEnemy = new THREE.MeshBasicMaterial({
     color: '#ff4d6d',
     transparent: true,
-    opacity: 0.25,
+    opacity: 0.1,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
   private readonly glowBlackhole = new THREE.MeshBasicMaterial({
     color: '#b44dff',
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.18,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
   });
 
   /** Instant lance beam visuals (no travel). */
@@ -320,7 +343,7 @@ export class BulletPool {
     mesh.visible = true;
     mesh.position.copy(origin).addScaledVector(dir, distance * 0.5);
     mesh.position.y = 0.55;
-    mesh.scale.set(0.18 * width, 0.22, distance);
+    mesh.scale.set(0.06 * width, 0.09, distance);
     mesh.lookAt(mesh.position.clone().add(dir));
     const mat = mesh.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.95;
@@ -392,7 +415,7 @@ export class BulletPool {
       bullet.mesh.material = this.matBlackhole;
       glow.material = this.glowBlackhole;
       glow.visible = true;
-      bullet.mesh.scale.setScalar(1.25 * vs);
+      bullet.mesh.scale.setScalar(1.45 * vs);
     } else if (kind === 'player-missile') {
       bullet.mesh.geometry = this.geoMissile;
       bullet.mesh.material = this.matMissile;

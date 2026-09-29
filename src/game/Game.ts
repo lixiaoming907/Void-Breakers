@@ -286,6 +286,7 @@ export class Game {
       this.enemyPosBuf,
     );
     for (const hit of secEvents.orbitHits) {
+      this.audio.secondary('orbit');
       const dmg = hit.damage * playerDamageScale(this.waves.currentWave);
       const candidates = this.enemyGrid.query(hit.x, hit.z, 1.2, this.queryBuf);
       for (let ci = 0; ci < candidates.length; ci++) {
@@ -322,9 +323,10 @@ export class Game {
           weaponLife: 1,
         });
       }
-      this.audio.shoot();
+      this.audio.secondary('missile');
     }
     for (const nova of secEvents.novas) {
+      this.audio.secondary('nova');
       this.effects.shockwave(_novaPos.set(nova.x, 0, nova.z), '#00f5d4', nova.radius * 0.85, 0.4);
       this.cameraRig.addShake(0.05);
       this.postfx.pulse(1.05);
@@ -343,6 +345,7 @@ export class Game {
     for (const shot of secEvents.turretShots) {
       const dir = _dir.set(shot.tx - shot.x, 0, shot.tz - shot.z);
       if (dir.lengthSq() < 0.001) continue;
+      this.audio.secondary('turret');
       this.bullets.firePlayer({
         origin: _origin.set(shot.x, 0.4, shot.z),
         direction: dir,
@@ -464,10 +467,10 @@ export class Game {
           }
         }
       }
-      this.audio.shoot();
+      this.audio.shoot('lance');
       this.cameraRig.addShake(0.04);
       this.postfx.pulse(1.12);
-      this.effects.burst(origin, '#4db8ff', 4, 3, 0.7);
+      this.effects.burst(origin, '#4db8ff', 3, 2.5, 0.5);
       return;
     }
 
@@ -528,10 +531,10 @@ export class Game {
       weaponLife,
     });
 
-    this.audio.shoot();
+    this.audio.shoot(s.weapon);
     const flash =
       s.weapon === 'blackhole' ? '#b44dff' : s.weapon === 'reflect' ? '#2dff88' : s.weapon === 'missile' ? '#ff8c42' : '#7df9ff';
-    this.effects.burst(origin, crit ? '#fee440' : flash, 3, 2.5, 0.65);
+    this.effects.burst(origin, crit ? '#fee440' : flash, 3, 2.2, 0.5);
   }
 
   private createScene(): void {
@@ -857,7 +860,7 @@ export class Game {
     // Cap heavy death VFX / audio when many die at once (wave clear / explosion chain)
     const cheap = this.deathsThisFrame > this.deathVfxBudget;
     if (!cheap || enemy.kind === 'boss') {
-      this.audio.explode();
+      this.audio.explode(enemy.kind === 'boss');
       if (this.explosionBudget.trySpend(1)) {
         _v1.copy(enemy.group.position).setY(0.55);
         this.effects.explosion(
