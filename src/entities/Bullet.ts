@@ -273,18 +273,18 @@ export class BulletPool {
       }
 
       case 'blackhole': {
-        // 短粗球体，持续吸扯 + 持续伤害，不因碰撞消失
+        // large sphere, slow, persistent contact damage + gravity (Game)
         for (let i = 0; i < Math.max(1, Math.min(shots, 3)); i++) {
-          const offset = (i - (Math.min(shots, 3) - 1) / 2) * 0.45;
+          const offset = (i - (Math.min(shots, 3) - 1) / 2) * 0.55;
           const d = _dir.copy(dir).addScaledVector(right, offset).normalize();
-          this.spawn('player-blackhole', req.origin, d, dmgMul * 0.35, req.speed * 0.28, 4.8, {
+          this.spawn('player-blackhole', req.origin, d, 0, req.speed * 0.22, 6.5, {
             pierce: 0,
-            radius: 0.85 * req.weaponTurn,
+            radius: 1.35 * req.weaponTurn,
             crit: req.crit,
-            visualScale: 1.15,
-            gravity: 7.5 * req.weaponExtra,
-            aoe: 1.35 * req.weaponTurn,
-            dps: dmgMul * 2.4 * req.weaponLife,
+            visualScale: 1.0,
+            gravity: 14 * req.weaponExtra,
+            aoe: 2.2 * req.weaponTurn,
+            dps: dmgMul * 3.2 * req.weaponLife,
           });
         }
         break;
@@ -415,7 +415,7 @@ export class BulletPool {
       bullet.mesh.material = this.matBlackhole;
       glow.material = this.glowBlackhole;
       glow.visible = true;
-      bullet.mesh.scale.setScalar(1.45 * vs);
+      bullet.mesh.scale.setScalar(1.55 * vs);
     } else if (kind === 'player-missile') {
       bullet.mesh.geometry = this.geoMissile;
       bullet.mesh.material = this.matMissile;
@@ -492,19 +492,8 @@ export class BulletPool {
         }
       }
 
-      // blackhole gravity pull on enemies (positions only — Game applies damage)
+      // blackhole gravity is applied in Game against real enemy transforms
       if (bullet.gravity > 0) {
-        for (let i = 0; i < enemyPositions.length; i++) {
-          const t = enemyPositions[i];
-          const dx = bullet.mesh.position.x - t.x;
-          const dz = bullet.mesh.position.z - t.z;
-          const dist = Math.hypot(dx, dz);
-          if (dist > 0.15 && dist < 14) {
-            const pull = (bullet.gravity * delta * 12) / Math.max(dist, 1.2);
-            t.x += (dx / dist) * pull;
-            t.z += (dz / dist) * pull;
-          }
-        }
         bullet.mesh.rotation.y += delta * 2.8;
       }
 

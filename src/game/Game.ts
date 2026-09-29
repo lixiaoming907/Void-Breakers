@@ -470,7 +470,6 @@ export class Game {
       this.audio.shoot('lance');
       this.cameraRig.addShake(0.04);
       this.postfx.pulse(1.12);
-      this.effects.burst(origin, '#4db8ff', 3, 2.5, 0.5);
       return;
     }
 
@@ -532,9 +531,7 @@ export class Game {
     });
 
     this.audio.shoot(s.weapon);
-    const flash =
-      s.weapon === 'blackhole' ? '#b44dff' : s.weapon === 'reflect' ? '#2dff88' : s.weapon === 'missile' ? '#ff8c42' : '#7df9ff';
-    this.effects.burst(origin, crit ? '#fee440' : flash, 3, 2.2, 0.5);
+    // no muzzle smoke
   }
 
   private createScene(): void {
@@ -622,17 +619,26 @@ export class Game {
     this.bullets.forEachPlayerBullet((bullet) => {
       if (bullet.spawnGrace > 0) return;
 
-      // ── 黑洞：持续 AOE，不因碰撞消失 ──
+      // ── 黑洞：引力拉扯真实敌人 + 持续 AOE，不因碰撞消失 ──
       if (bullet.kind === 'player-blackhole') {
-        const aoe = bullet.aoe || bullet.radius + 0.5;
-        const candidates = this.enemyGrid.query(bullet.mesh.position.x, bullet.mesh.position.z, aoe, this.queryBuf);
+        const aoe = Math.max(bullet.aoe || 2.2, bullet.radius + 0.4);
+        const gravity = bullet.gravity || 12;
+        const pullRange = aoe * 4.5;
+        const candidates = this.enemyGrid.query(bullet.mesh.position.x, bullet.mesh.position.z, pullRange, this.queryBuf);
         const tick = bullet.dps * delta;
         for (let ci = 0; ci < candidates.length; ci++) {
           const enemy = enemyList[candidates[ci]];
           if (!enemy || !enemy.alive) continue;
           const dx = bullet.mesh.position.x - enemy.group.position.x;
           const dz = bullet.mesh.position.z - enemy.group.position.z;
-          if (dx * dx + dz * dz <= (aoe + enemy.radius) * (aoe + enemy.radius)) {
+          const dist = Math.hypot(dx, dz);
+          // 引力：把敌人往黑洞中心拉（真实 transform，不是快照）
+          if (dist > 0.2 && dist < pullRange) {
+            const strength = (gravity * delta) / Math.max(1.1, dist * 0.35);
+            enemy.group.position.x += (dx / dist) * strength;
+            enemy.group.position.z += (dz / dist) * strength;
+          }
+          if (dist <= aoe + enemy.radius) {
             this.damageEnemy(enemy, tick, false, 3);
           }
         }
@@ -665,13 +671,7 @@ export class Game {
           }
 
           const killed = this.damageEnemy(enemy, bullet.damage, bullet.crit);
-          this.effects.burst(
-            bullet.mesh.position,
-            bullet.crit ? '#fee440' : bullet.kind === 'player-reflect' ? '#2dff88' : '#7df9ff',
-            5,
-            4,
-            1,
-          );
+          // no impact smoke — only audio / score feedback
 
           if (bullet.explosive) {
             this.explodeAt(bullet.mesh.position, bullet.damage * 0.55, enemy, 0, 1.8);
@@ -721,7 +721,6 @@ export class Game {
         if (this.player.takeDamage(bullet.damage)) {
           this.audio.hurt();
           this.cameraRig.addShake(0.12);
-          this.effects.burst(playerPos, '#ff4d6d', 10, 5, 1);
           this.combo = 0;
           if (this.player.state.shield <= 0) {
             this.effects.shockwave(playerPos, '#4cc9f0', 2.2, 0.35);
@@ -823,10 +822,11 @@ export class Game {
 
     const canVfx = this.explosionBudget.trySpend(1);
     if (canVfx) {
-      _v1.set(px, 0.2, pz);
-      this.effects.explosion(_v1, '#ff8c42', Math.min(1.4, 0.7 + radius * 0.25));
-      this.cameraRig.addShake(0.05);
-      this.postfx.pulse(1.08);
+      // missile boom: small smoke puff only (no full spark explosion)
+      _v1.set(px, 0.25, pz);
+      this.effects.burst(_v1, '#8a9aaa', 6, 2.2, 1.4);
+      this.cameraRig.addShake(0.06);
+      this.postfx.pulse(1.1);
     }
 
     const r = radius;
@@ -857,27 +857,17 @@ export class Game {
     this.score += Math.floor(enemy.score * comboMult * (1 + this.waves.currentWave * 0.04));
 
     this.deathsThisFrame += 1;
-    // Cap heavy death VFX / audio when many die at once (wave clear / explosion chain)
     const cheap = this.deathsThisFrame > this.deathVfxBudget;
     if (!cheap || enemy.kind === 'boss') {
       this.audio.explode(enemy.kind === 'boss');
-      if (this.explosionBudget.trySpend(1)) {
-        _v1.copy(enemy.group.position).setY(0.55);
-        this.effects.explosion(
-          _v1,
-          enemy.kind === 'boss' ? '#ff2e88' : '#ff4d6d',
-          enemy.kind === 'boss' ? 1.7 : enemy.kind === 'swarm' ? 0.4 : 0.75,
-        );
-      }
-    } else if (this.explosionBudget.trySpend(1)) {
-      _v1.copy(enemy.group.position).setY(0.5);
-      this.effects.burst(_v1, '#ff4d6d', 3, 3, 0.55);
     }
-
-    if (!cheap || enemy.kind === 'boss') {
-      this.cameraRig.addShake(enemy.kind === 'boss' ? 0.85 : enemy.kind === 'swarm' ? 0.012 : 0.035);
-      this.hitStop = enemy.kind === 'boss' ? 0.1 : enemy.kind === 'swarm' ? 0.012 : 0.025;
-      this.postfx.pulse(enemy.kind === 'boss' ? 1.25 : 1.0);
+    // no death smoke/sparks — score & audio only (except boss pulse)
+    if (enemy.kind === 'boss') {
+      this.cameraRig.addShake(0.85);
+      this.hitStop = 0.1;
+      this.postfx.pulse(1.25);
+    } else if (!cheap) {
+      this.cameraRig.addShake(0.03);
     }
 
     if (this.stats.shieldOnKill > 0) {
