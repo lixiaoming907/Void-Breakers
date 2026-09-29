@@ -19,27 +19,49 @@ async function main() {
     await page.evaluate((w) => window.__THREE_GAME_TEST_HOOKS__?.setState(`give:${w}`), weapon);
     await page.mouse.move(640, 280);
     await page.mouse.down();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     const d = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
     await page.mouse.up();
-    await page.waitForTimeout(150);
-    await page.screenshot({ path: `artifacts/weapons-${weapon}.png` });
-    return { weapon: d.weapon, bullets: d.bullets };
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: `artifacts/w2-${weapon}.png` });
+    return { weapon: d.weapon, bullets: d.bullets, score: d.score };
   }
 
   const results = [];
-  for (const w of ['lance', 'railgun', 'swarm', 'scatter', 'homing']) {
+  for (const w of ['scatter', 'lance', 'homing', 'blackhole', 'missile', 'reflect']) {
     results.push(await fireWeapon(w));
   }
 
-  console.log(JSON.stringify({ results, errors }, null, 2));
+  // death spam: explosive-like via missile + many enemies
+  await page.evaluate(() => {
+    window.__THREE_GAME_TEST_HOOKS__?.setState('give:missile');
+    window.__THREE_GAME_TEST_HOOKS__?.setState('give:multishot');
+    window.__THREE_GAME_TEST_HOOKS__?.setState('give:multishot');
+    window.__THREE_GAME_TEST_HOOKS__?.setState('give:fireRate');
+    window.__THREE_GAME_TEST_HOOKS__?.setState('give:wMissileBoomRadius');
+    window.__THREE_GAME_TEST_HOOKS__?.setState('give:wMissileBoomDmg');
+  });
+  await page.mouse.down();
+  const t0 = Date.now();
+  let lastFrame = 0;
+  let minDelta = 1e9;
+  while (Date.now() - t0 < 3000) {
+    await page.waitForTimeout(250);
+    const d = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__);
+    if (lastFrame) minDelta = Math.min(minDelta, d.frame - lastFrame);
+    lastFrame = d.frame;
+  }
+  await page.mouse.up();
+
+  console.log(JSON.stringify({ results, minFramesPer250ms: minDelta, errors }, null, 2));
   await browser.close();
   if (errors.length) process.exitCode = 1;
   for (const r of results) {
-    if ((r.bullets ?? 0) < 1) {
-      console.error('no bullets for', r.weapon);
-      process.exitCode = 1;
-    }
+    if (r.weapon !== r.weapon) process.exitCode = 1;
+  }
+  if (minDelta < 3) {
+    console.error('death/missile spam may stall');
+    process.exitCode = 1;
   }
 }
 

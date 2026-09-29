@@ -26,15 +26,12 @@ export type HudSnapshot = {
 };
 
 const WEAPON_LABEL: Record<string, string> = {
-  pulse: '脉冲',
-  scatter: '霰弹',
-  homing: '飞弹',
-  plasma: '等离子',
-  railgun: '磁轨',
-  flak: '高射',
+  scatter: '散弹',
   lance: '光矛',
-  ricochet: '弹射',
-  swarm: '蜂群',
+  homing: '追踪',
+  blackhole: '黑洞',
+  missile: '导弹',
+  reflect: '反射',
 };
 
 const SECONDARY_LABEL: Record<string, string> = {

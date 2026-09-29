@@ -272,6 +272,7 @@ export class Game {
       if (e.alive) this.enemyGrid.insert(i, e.group.position.x, e.group.position.z);
     }
     this.explosionBudget.reset();
+    this.deathsThisFrame = 0;
 
     this.bullets.update(delta, this.enemyPosBuf);
     this.enemies.update(delta, this.reducedMotion ? 0 : elapsed, this.player.group.position);
@@ -347,7 +348,7 @@ export class Game {
         direction: dir,
         damage: shot.damage * this.stats.damageMult * playerDamageScale(this.waves.currentWave),
         speed: 20,
-        weapon: 'pulse',
+        weapon: 'reflect',
         multishot: 0,
         pierce: 0,
         explosive: false,
@@ -414,13 +415,12 @@ export class Game {
 
   private fireWeapon(): void {
     const origin = _fireOrigin.copy(this.player.group.position);
-    origin.y = 0.42;
+    origin.y = 0.5;
     const dir = _fireDir.copy(this.player.aimWorld).sub(this.player.group.position);
     dir.y = 0;
     if (dir.lengthSq() < 0.001) dir.set(0, 0, -1);
     dir.normalize();
-    // spawn just outside the thin shield / player hull so shots never "stick" on self
-    origin.addScaledVector(dir, 0.95);
+    origin.addScaledVector(dir, 0.85);
 
     const crit = this.rng() < this.stats.critChance;
     const damage =
@@ -430,6 +430,47 @@ export class Game {
       (crit ? this.stats.critDamageMult : 1);
 
     const s = this.stats;
+
+    // ── 光矛：瞬间出光，无飞行过程 ──
+    if (s.weapon === 'lance') {
+      const width = s.lanceWidth;
+      const beams = 1 + s.multishotBonus + (s.lanceWidth > 1.3 ? 1 : 0);
+      const range = 48;
+      for (let b = 0; b < Math.min(beams, 3); b++) {
+        const lateral = (b - (Math.min(beams, 3) - 1) / 2) * 0.55 * width;
+        const d = _dir.copy(dir);
+        // slight lateral offset without rotating
+        const ox = -dir.z * lateral;
+        const oz = dir.x * lateral;
+        const fromX = origin.x + ox;
+        const fromZ = origin.z + oz;
+        this.bullets.spawnLanceBeam(
+          _origin.set(fromX, 0.5, fromZ),
+          d,
+          width,
+          range,
+        );
+        // sample along the beam and damage enemies in the corridor
+        const enemyList = this.enemies.enemies;
+        for (const enemy of enemyList) {
+          if (!enemy.alive) continue;
+          const ex = enemy.group.position.x - fromX;
+          const ez = enemy.group.position.z - fromZ;
+          const along = ex * dir.x + ez * dir.z;
+          if (along < 0 || along > range) continue;
+          const side = Math.abs(ex * -dir.z + ez * dir.x);
+          if (side <= enemy.radius + 0.35 * width) {
+            this.damageEnemy(enemy, damage * s.lanceDmg * 1.65, crit, 0);
+          }
+        }
+      }
+      this.audio.shoot();
+      this.cameraRig.addShake(0.04);
+      this.postfx.pulse(1.12);
+      this.effects.burst(origin, '#4db8ff', 4, 3, 0.7);
+      return;
+    }
+
     let weaponDamageMult = 1;
     let weaponMultishot = 0;
     let weaponExtra = 0;
@@ -438,12 +479,8 @@ export class Game {
     let weaponLife = 1;
 
     switch (s.weapon) {
-      case 'pulse':
-        weaponDamageMult = s.pulseDmg;
-        weaponMultishot = s.pulseExtra;
-        break;
       case 'scatter':
-        weaponDamageMult = s.scatterClose;
+        weaponDamageMult = s.scatterDmg;
         weaponExtra = s.scatterPellets;
         weaponPierce = s.scatterPierce;
         break;
@@ -452,34 +489,21 @@ export class Game {
         weaponMultishot = s.homingSalvo;
         weaponTurn = s.homingTurn;
         break;
-      case 'plasma':
-        weaponDamageMult = s.plasmaDmg;
-        weaponTurn = s.plasmaRadius;
-        weaponExtra = s.plasmaChain;
+      case 'blackhole':
+        weaponDamageMult = 1;
+        weaponTurn = s.blackholeRadius;
+        weaponExtra = s.blackholeGravity;
+        weaponLife = s.blackholeDps;
         break;
-      case 'railgun':
-        weaponDamageMult = s.railDmg;
-        weaponPierce = s.railPierce;
+      case 'missile':
+        weaponDamageMult = s.missileBoomDmg;
+        weaponTurn = s.missileBoomRadius;
+        weaponExtra = s.missileBoomDmg;
         break;
-      case 'flak':
-        weaponDamageMult = s.flakDmg;
-        weaponExtra = s.flakCluster;
-        weaponLife = s.flakLife;
-        break;
-      case 'lance':
-        weaponDamageMult = s.lanceDmg;
-        weaponTurn = s.lanceWidth;
-        weaponPierce = s.pierceBonus;
-        break;
-      case 'ricochet':
-        weaponDamageMult = s.ricochetDmg * s.ricochetSpeed;
-        weaponExtra = s.ricochetBounce;
-        weaponLife = s.ricochetSpeed;
-        break;
-      case 'swarm':
-        weaponDamageMult = s.swarmDmg;
-        weaponExtra = s.swarmDarts;
-        weaponTurn = s.swarmTurn;
+      case 'reflect':
+        weaponDamageMult = s.reflectDmg * s.reflectSpeed;
+        weaponExtra = s.reflectBounce;
+        weaponLife = s.reflectSpeed;
         break;
       default:
         break;
@@ -491,10 +515,9 @@ export class Game {
       damage,
       speed: PLAYER.bulletSpeed * s.bulletSpeedMult,
       weapon: s.weapon,
-      // global multishot ALWAYS applies after weapon swap
       multishot: s.multishotBonus,
       pierce: s.pierceBonus,
-      explosive: s.explosive || s.weapon === 'plasma',
+      explosive: s.explosive || s.weapon === 'missile',
       crit,
       weaponMultishot,
       weaponDamageMult,
@@ -506,7 +529,9 @@ export class Game {
     });
 
     this.audio.shoot();
-    this.effects.burst(origin, crit ? '#fee440' : '#7df9ff', 3, 2.5, 0.65);
+    const flash =
+      s.weapon === 'blackhole' ? '#b44dff' : s.weapon === 'reflect' ? '#2dff88' : s.weapon === 'missile' ? '#ff8c42' : '#7df9ff';
+    this.effects.burst(origin, crit ? '#fee440' : flash, 3, 2.5, 0.65);
   }
 
   private createScene(): void {
@@ -593,9 +618,27 @@ export class Game {
 
     this.bullets.forEachPlayerBullet((bullet) => {
       if (bullet.spawnGrace > 0) return;
+
+      // ── 黑洞：持续 AOE，不因碰撞消失 ──
+      if (bullet.kind === 'player-blackhole') {
+        const aoe = bullet.aoe || bullet.radius + 0.5;
+        const candidates = this.enemyGrid.query(bullet.mesh.position.x, bullet.mesh.position.z, aoe, this.queryBuf);
+        const tick = bullet.dps * delta;
+        for (let ci = 0; ci < candidates.length; ci++) {
+          const enemy = enemyList[candidates[ci]];
+          if (!enemy || !enemy.alive) continue;
+          const dx = bullet.mesh.position.x - enemy.group.position.x;
+          const dz = bullet.mesh.position.z - enemy.group.position.z;
+          if (dx * dx + dz * dz <= (aoe + enemy.radius) * (aoe + enemy.radius)) {
+            this.damageEnemy(enemy, tick, false, 3);
+          }
+        }
+        return;
+      }
+
       const bx = bullet.mesh.position.x;
       const bz = bullet.mesh.position.z;
-      const candidates = this.enemyGrid.query(bx, bz, 2.2, this.queryBuf);
+      const candidates = this.enemyGrid.query(bx, bz, 2.4, this.queryBuf);
       for (let ci = 0; ci < candidates.length; ci++) {
         const enemy = enemyList[candidates[ci]];
         if (!enemy || !enemy.alive) continue;
@@ -604,26 +647,39 @@ export class Game {
         const distSq = dx * dx + dz * dz;
         const hitRadius = enemy.radius + bullet.radius + 0.12;
         if (distSq <= hitRadius * hitRadius) {
+          // ── 导弹：命中爆炸 ──
+          if (bullet.kind === 'player-missile') {
+            this.explodeAt(
+              bullet.mesh.position,
+              bullet.boomDamage || bullet.damage * 1.8,
+              enemy,
+              0,
+              bullet.aoe || 2.1,
+            );
+            this.bullets.consume(bullet);
+            this.audio.hit();
+            return;
+          }
+
           const killed = this.damageEnemy(enemy, bullet.damage, bullet.crit);
           this.effects.burst(
             bullet.mesh.position,
-            bullet.crit ? '#fee440' : '#7df9ff',
-            bullet.kind === 'player-plasma' ? 10 : 5,
+            bullet.crit ? '#fee440' : bullet.kind === 'player-reflect' ? '#2dff88' : '#7df9ff',
+            5,
             4,
             1,
           );
 
-          if (bullet.explosive || bullet.kind === 'player-plasma') {
-            this.explodeAt(bullet.mesh.position, bullet.damage * 0.65, enemy, 0);
+          if (bullet.explosive) {
+            this.explodeAt(bullet.mesh.position, bullet.damage * 0.55, enemy, 0, 1.8);
           }
 
           if (bullet.pierce > 0) {
             bullet.pierce -= 1;
-          } else if (bullet.bounces > 0) {
-            // ricochet retarget — reuse spatial hash instead of scanning all enemies
+          } else if (bullet.bounces > 0 && bullet.kind === 'player-reflect') {
             let best: Enemy | null = null;
-            let bestDistSq = 100;
-            const near = this.enemyGrid.query(bx, bz, 10, this.queryBuf);
+            let bestDistSq = 120;
+            const near = this.enemyGrid.query(bx, bz, 11, this.queryBuf);
             for (let ni = 0; ni < near.length; ni++) {
               const e = enemyList[near[ni]];
               if (!e || !e.alive || e === enemy) continue;
@@ -635,13 +691,16 @@ export class Game {
                 best = e;
               }
             }
-            if (best && this.bullets.bounce(bullet, best.group.position, PLAYER.bulletSpeed * this.stats.bulletSpeedMult)) {
-              // keep flying after bounce
+            if (
+              best &&
+              this.bullets.bounce(bullet, best.group.position, PLAYER.bulletSpeed * this.stats.bulletSpeedMult)
+            ) {
+              // keep flying
             } else {
-              this.bullets.consume(bullet, bullet.split);
+              this.bullets.consume(bullet);
             }
           } else {
-            this.bullets.consume(bullet, bullet.split);
+            this.bullets.consume(bullet);
           }
           this.audio.hit();
           if (killed) void killed;
@@ -650,12 +709,12 @@ export class Game {
       }
     });
 
-    this.bullets.forEachKind('enemy', (bullet) => {
+    for (const bullet of this.bullets.getActive('enemy')) {
       const dx = bullet.mesh.position.x - playerPos.x;
       const dz = bullet.mesh.position.z - playerPos.z;
       const distSq = dx * dx + dz * dz;
       if (distSq <= (playerRadius + 0.22) * (playerRadius + 0.22)) {
-        this.bullets.consume(bullet, false);
+        this.bullets.consume(bullet);
         if (this.player.takeDamage(bullet.damage)) {
           this.audio.hurt();
           this.cameraRig.addShake(0.12);
@@ -667,7 +726,7 @@ export class Game {
           }
         }
       }
-    });
+    }
 
     for (const enemy of this.enemies.enemies) {
       if (!enemy.alive) continue;
@@ -750,26 +809,25 @@ export class Game {
     damage: number,
     source?: Enemy,
     chain = 0,
+    radius = 2.5,
   ): void {
-    // hard-cap recursive explosion chains (explosive + bombers + splitters)
     if (chain > 2) return;
     if (this.explosionChain > 12) return;
     this.explosionChain += 1;
 
-    // snapshot — callers may share scratch vectors that recursion overwrites
     const px = position.x;
     const pz = position.z;
 
     const canVfx = this.explosionBudget.trySpend(1);
     if (canVfx) {
       _v1.set(px, 0.2, pz);
-      this.effects.explosion(_v1, '#00f5d4', 1.05);
+      this.effects.explosion(_v1, '#ff8c42', Math.min(1.4, 0.7 + radius * 0.25));
       this.cameraRig.addShake(0.05);
       this.postfx.pulse(1.08);
     }
 
-    const radius = 2.5;
-    const candidates = this.enemyGrid.query(px, pz, radius, this.queryBuf);
+    const r = radius;
+    const candidates = this.enemyGrid.query(px, pz, r, this.queryBuf);
     const enemyList = this.enemies.enemies;
     for (let i = 0; i < candidates.length; i++) {
       const enemy = enemyList[candidates[i]];
@@ -777,9 +835,8 @@ export class Game {
       const dx = enemy.group.position.x - px;
       const dz = enemy.group.position.z - pz;
       const d = Math.sqrt(dx * dx + dz * dz);
-      if (d < radius) {
-        const falloff = 1 - (d / radius) * 0.45;
-        // pass chain so death explosions do not snowball
+      if (d < r) {
+        const falloff = 1 - (d / r) * 0.45;
         const killed = this.enemies.damage(enemy, damage * falloff);
         if (killed) this.onEnemyKilled(enemy, chain + 1);
       }
@@ -787,23 +844,38 @@ export class Game {
     this.explosionChain = Math.max(0, this.explosionChain - 1);
   }
 
+  private deathVfxBudget = 3;
+  private deathsThisFrame = 0;
+
   private onEnemyKilled(enemy: Enemy, chain = 0): void {
     this.combo += 1;
     this.comboTimer = 2.8;
     const comboMult = 1 + Math.floor(this.combo / 5) * 0.35;
     this.score += Math.floor(enemy.score * comboMult * (1 + this.waves.currentWave * 0.04));
-    this.audio.explode();
-    if (this.explosionBudget.trySpend(1)) {
-      _v1.copy(enemy.group.position).setY(0.55);
-      this.effects.explosion(
-        _v1,
-        enemy.kind === 'boss' ? '#ff2e88' : '#ff4d6d',
-        enemy.kind === 'boss' ? 1.7 : enemy.kind === 'swarm' ? 0.45 : 0.8,
-      );
+
+    this.deathsThisFrame += 1;
+    // Cap heavy death VFX / audio when many die at once (wave clear / explosion chain)
+    const cheap = this.deathsThisFrame > this.deathVfxBudget;
+    if (!cheap || enemy.kind === 'boss') {
+      this.audio.explode();
+      if (this.explosionBudget.trySpend(1)) {
+        _v1.copy(enemy.group.position).setY(0.55);
+        this.effects.explosion(
+          _v1,
+          enemy.kind === 'boss' ? '#ff2e88' : '#ff4d6d',
+          enemy.kind === 'boss' ? 1.7 : enemy.kind === 'swarm' ? 0.4 : 0.75,
+        );
+      }
+    } else if (this.explosionBudget.trySpend(1)) {
+      _v1.copy(enemy.group.position).setY(0.5);
+      this.effects.burst(_v1, '#ff4d6d', 3, 3, 0.55);
     }
-    this.cameraRig.addShake(enemy.kind === 'boss' ? 0.85 : enemy.kind === 'swarm' ? 0.012 : 0.035);
-    this.hitStop = enemy.kind === 'boss' ? 0.1 : enemy.kind === 'swarm' ? 0.012 : 0.03;
-    this.postfx.pulse(enemy.kind === 'boss' ? 1.25 : 1.0);
+
+    if (!cheap || enemy.kind === 'boss') {
+      this.cameraRig.addShake(enemy.kind === 'boss' ? 0.85 : enemy.kind === 'swarm' ? 0.012 : 0.035);
+      this.hitStop = enemy.kind === 'boss' ? 0.1 : enemy.kind === 'swarm' ? 0.012 : 0.025;
+      this.postfx.pulse(enemy.kind === 'boss' ? 1.25 : 1.0);
+    }
 
     if (this.stats.shieldOnKill > 0) {
       this.player.addShield(this.stats.shieldOnKill);
@@ -1028,7 +1100,7 @@ export class Game {
       ['暴击率', `${Math.round(st.critChance * 100)}%`],
       ['暴击伤害', `×${st.critDamageMult.toFixed(2)}`],
       ['多重射击', `+${st.multishotBonus}`],
-      ['穿透', `+${st.pierceBonus + (st.weapon === 'railgun' ? 3 + st.railPierce : st.weapon === 'scatter' ? st.scatterPierce : 0)}`],
+      ['穿透', `+${st.pierceBonus + (st.weapon === 'scatter' ? st.scatterPierce : 0)}`],
       ['护盾回充', `${st.shieldRegenPerSec.toFixed(1)}/s`],
       ['冲刺冷却', `${(this.player.getDashCooldownMax()).toFixed(2)}s`],
     ];
@@ -1090,7 +1162,7 @@ export class Game {
             this.combo = 7;
             this.comboTimer = 2.5;
             this.player.addRapid(6);
-            this.applyUpgradeForTest('plasma');
+            this.applyUpgradeForTest('missile');
             this.player.addShield(35);
           }
         }

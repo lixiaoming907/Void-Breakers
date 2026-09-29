@@ -1,13 +1,10 @@
 export type WeaponId =
-  | 'pulse'
   | 'scatter'
-  | 'homing'
-  | 'plasma'
-  | 'railgun'
-  | 'flak'
   | 'lance'
-  | 'ricochet'
-  | 'swarm';
+  | 'homing'
+  | 'blackhole'
+  | 'missile'
+  | 'reflect';
 
 export type SecondaryId = 'orbit' | 'missilePod' | 'nova' | 'turret';
 
@@ -31,33 +28,24 @@ export type UpgradeId =
   | 'explosive'
   | 'agility'
   // weapon-specific
-  | 'wPulseRate'
-  | 'wPulseDouble'
-  | 'wPulseDmg'
   | 'wScatterPellets'
-  | 'wScatterClose'
+  | 'wScatterDmg'
   | 'wScatterPierce'
+  | 'wLanceDmg'
+  | 'wLanceWidth'
+  | 'wLanceRate'
   | 'wHomingTurn'
   | 'wHomingSalvo'
-  | 'wHomingFuel'
-  | 'wPlasmaBoom'
-  | 'wPlasmaDmg'
-  | 'wPlasmaChain'
-  | 'wRailRate'
-  | 'wRailPierce'
-  | 'wRailDmg'
-  | 'wFlakCluster'
-  | 'wFlakFragDmg'
-  | 'wFlakLife'
-  | 'wLanceCharge'
-  | 'wLanceWidth'
-  | 'wLanceDmg'
-  | 'wRicochetBounce'
-  | 'wRicochetDmg'
-  | 'wRicochetSpeed'
-  | 'wSwarmDarts'
-  | 'wSwarmTurn'
-  | 'wSwarmDmg'
+  | 'wHomingDmg'
+  | 'wBlackholeGravity'
+  | 'wBlackholeRadius'
+  | 'wBlackholeDps'
+  | 'wMissileBoomDmg'
+  | 'wMissileBoomRadius'
+  | 'wMissileRate'
+  | 'wReflectBounce'
+  | 'wReflectDmg'
+  | 'wReflectSpeed'
   // secondary buffs
   | 'sOrbitDmg'
   | 'sOrbitCount'
@@ -80,9 +68,7 @@ export type UpgradeDef = {
   maxStacks: number;
   weapon?: WeaponId;
   secondary?: SecondaryId;
-  /** only offered when player owns this weapon */
   requiresWeapon?: WeaponId;
-  /** only offered when player owns this secondary */
   requiresSecondary?: SecondaryId;
 };
 
@@ -103,34 +89,25 @@ export type PlayerStats = {
   shieldOnKill: number;
   explosive: boolean;
   weapon: WeaponId;
-  // weapon-specific (persist across weapon swaps as global modifiers on matching weapon)
-  pulseRate: number;
-  pulseExtra: number;
-  pulseDmg: number;
+  // weapon-specific
   scatterPellets: number;
-  scatterClose: number;
+  scatterDmg: number;
   scatterPierce: number;
+  lanceDmg: number;
+  lanceWidth: number;
+  lanceRate: number;
   homingTurn: number;
   homingSalvo: number;
   homingDmg: number;
-  plasmaRadius: number;
-  plasmaDmg: number;
-  plasmaChain: number;
-  railRate: number;
-  railPierce: number;
-  railDmg: number;
-  flakCluster: number;
-  flakDmg: number;
-  flakLife: number;
-  lanceCharge: number;
-  lanceWidth: number;
-  lanceDmg: number;
-  ricochetBounce: number;
-  ricochetDmg: number;
-  ricochetSpeed: number;
-  swarmDarts: number;
-  swarmTurn: number;
-  swarmDmg: number;
+  blackholeGravity: number;
+  blackholeRadius: number;
+  blackholeDps: number;
+  missileBoomDmg: number;
+  missileBoomRadius: number;
+  missileRate: number;
+  reflectBounce: number;
+  reflectDmg: number;
+  reflectSpeed: number;
 };
 
 export type SecondaryStats = {
@@ -150,7 +127,6 @@ export type SecondaryStats = {
 
 export function defaultSecondaryStats(): SecondaryStats {
   return {
-    // stronger early-game secondaries
     orbitDamage: 14,
     orbitCount: 3,
     orbitSpin: 2.8,
@@ -209,16 +185,14 @@ export function applySecondaryBuff(stats: SecondaryStats, id: UpgradeId): void {
   }
 }
 
+/** Fire-rate factor per weapon (higher = shoots more often). */
 export const WEAPON_FIRE_RATE: Record<WeaponId, number> = {
-  pulse: 1,
-  scatter: 0.82,
-  homing: 0.7,
-  plasma: 0.55,
-  railgun: 0.45,
-  flak: 0.78,
-  lance: 0.38,
-  ricochet: 0.92,
-  swarm: 0.58,
+  scatter: 0.95,
+  lance: 0.42,
+  homing: 0.55,
+  blackhole: 0.28,
+  missile: 0.62,
+  reflect: 0.88,
 };
 
 export function defaultStats(): PlayerStats {
@@ -238,109 +212,76 @@ export function defaultStats(): PlayerStats {
     magnetRadius: 1.15,
     shieldOnKill: 0,
     explosive: false,
-    weapon: 'pulse',
-    pulseRate: 1,
-    pulseExtra: 0,
-    pulseDmg: 1,
+    weapon: 'scatter',
     scatterPellets: 0,
-    scatterClose: 1,
+    scatterDmg: 1,
     scatterPierce: 0,
+    lanceDmg: 1,
+    lanceWidth: 1,
+    lanceRate: 1,
     homingTurn: 1,
     homingSalvo: 0,
     homingDmg: 1,
-    plasmaRadius: 1,
-    plasmaDmg: 1,
-    plasmaChain: 0,
-    railRate: 1,
-    railPierce: 0,
-    railDmg: 1,
-    flakCluster: 0,
-    flakDmg: 1,
-    flakLife: 1,
-    lanceCharge: 1,
-    lanceWidth: 1,
-    lanceDmg: 1,
-    ricochetBounce: 1,
-    ricochetDmg: 1,
-    ricochetSpeed: 1,
-    swarmDarts: 0,
-    swarmTurn: 1,
-    swarmDmg: 1,
+    blackholeGravity: 1,
+    blackholeRadius: 1,
+    blackholeDps: 1,
+    missileBoomDmg: 1,
+    missileBoomRadius: 1,
+    missileRate: 1,
+    reflectBounce: 1,
+    reflectDmg: 1,
+    reflectSpeed: 1,
   };
 }
 
 export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
-  pulse: {
-    id: 'pulse',
-    name: '脉冲步枪',
-    description: '高射速标准弹幕，稳定输出。',
-    tag: '武器',
-    maxStacks: 1,
-    weapon: 'pulse',
-  },
   scatter: {
     id: 'scatter',
-    name: '散射霰弹',
-    description: '一次喷射多发弹丸，近距爆发极高。',
+    name: '散弹',
+    description: '扇形弹幕，主打量大。',
     tag: '武器',
     maxStacks: 1,
     weapon: 'scatter',
   },
-  homing: {
-    id: 'homing',
-    name: '追猎飞弹',
-    description: '自动追踪敌人的慢速飞弹。',
-    tag: '武器',
-    maxStacks: 1,
-    weapon: 'homing',
-  },
-  plasma: {
-    id: 'plasma',
-    name: '等离子炮',
-    description: '重型能量球，命中产生范围爆炸。',
-    tag: '武器',
-    maxStacks: 1,
-    weapon: 'plasma',
-  },
-  railgun: {
-    id: 'railgun',
-    name: '磁轨炮',
-    description: '低射速高伤害，子弹贯穿多个敌人。',
-    tag: '武器',
-    maxStacks: 1,
-    weapon: 'railgun',
-  },
-  flak: {
-    id: 'flak',
-    name: '高射炮',
-    description: '弹丸命中或到时分裂成碎片。',
-    tag: '武器',
-    maxStacks: 1,
-    weapon: 'flak',
-  },
   lance: {
     id: 'lance',
     name: '光矛',
-    description: '发射长条激光束，直线扫穿大片敌人。',
+    description: '瞬间射出亮蓝光线，高穿透高伤害。',
     tag: '武器',
     maxStacks: 1,
     weapon: 'lance',
   },
-  ricochet: {
-    id: 'ricochet',
-    name: '弹射手枪',
-    description: '子弹命中后弹向附近敌人。',
+  homing: {
+    id: 'homing',
+    name: '追踪飞弹',
+    description: '慢速但强力追踪目标。',
     tag: '武器',
     maxStacks: 1,
-    weapon: 'ricochet',
+    weapon: 'homing',
   },
-  swarm: {
-    id: 'swarm',
-    name: '蜂群发射器',
-    description: '扇形放出大量微小飞镖，轻微曲线咬住敌人。',
+  blackhole: {
+    id: 'blackhole',
+    name: '黑洞炮',
+    description: '缓慢前进的引力球，持续吸扯并伤害。',
     tag: '武器',
     maxStacks: 1,
-    weapon: 'swarm',
+    weapon: 'blackhole',
+  },
+  missile: {
+    id: 'missile',
+    name: '导弹',
+    description: '命中爆炸造成范围伤害。',
+    tag: '武器',
+    maxStacks: 1,
+    weapon: 'missile',
+  },
+  reflect: {
+    id: 'reflect',
+    name: '反射光线',
+    description: '亮绿短光线，命中弹向下一目标。',
+    tag: '武器',
+    maxStacks: 1,
+    weapon: 'reflect',
   },
   orbit: {
     id: 'orbit',
@@ -486,43 +427,19 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     tag: '属性',
     maxStacks: 5,
   },
-  // ---- weapon-specific (appear only if that weapon is equipped) ----
-  wPulseRate: {
-    id: 'wPulseRate',
-    name: '脉冲超频',
-    description: '脉冲武器射速 +30%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'pulse',
-  },
-  wPulseDouble: {
-    id: 'wPulseDouble',
-    name: '双联脉冲',
-    description: '脉冲额外 +2 发弹丸',
-    tag: '专属',
-    maxStacks: 2,
-    requiresWeapon: 'pulse',
-  },
-  wPulseDmg: {
-    id: 'wPulseDmg',
-    name: '过载弹芯',
-    description: '脉冲伤害 +35%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'pulse',
-  },
+  // scatter
   wScatterPellets: {
     id: 'wScatterPellets',
     name: '扩散喷口',
-    description: '霰弹 +3 弹丸',
+    description: '散弹弹丸 +4',
     tag: '专属',
     maxStacks: 3,
     requiresWeapon: 'scatter',
   },
-  wScatterClose: {
-    id: 'wScatterClose',
+  wScatterDmg: {
+    id: 'wScatterDmg',
     name: '近距处决',
-    description: '霰弹伤害 +40%',
+    description: '散弹伤害 +35%',
     tag: '专属',
     maxStacks: 3,
     requiresWeapon: 'scatter',
@@ -530,123 +447,12 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   wScatterPierce: {
     id: 'wScatterPierce',
     name: '灼热弹丸',
-    description: '霰弹穿透 +1',
+    description: '散弹穿透 +1',
     tag: '专属',
     maxStacks: 2,
     requiresWeapon: 'scatter',
   },
-  wHomingTurn: {
-    id: 'wHomingTurn',
-    name: '锁定矩阵',
-    description: '飞弹转向更强、弹速 +15%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'homing',
-  },
-  wHomingSalvo: {
-    id: 'wHomingSalvo',
-    name: '齐射协议',
-    description: '飞弹额外 +2 枚',
-    tag: '专属',
-    maxStacks: 2,
-    requiresWeapon: 'homing',
-  },
-  wHomingFuel: {
-    id: 'wHomingFuel',
-    name: '燃料推进',
-    description: '飞弹伤害 +35%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'homing',
-  },
-  wPlasmaBoom: {
-    id: 'wPlasmaBoom',
-    name: '聚变核心',
-    description: '等离子爆炸范围 +35%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'plasma',
-  },
-  wPlasmaDmg: {
-    id: 'wPlasmaDmg',
-    name: '过热球体',
-    description: '等离子伤害 +30%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'plasma',
-  },
-  wPlasmaChain: {
-    id: 'wPlasmaChain',
-    name: '连锁爆轰',
-    description: '爆炸伤害 +25%，范围再 +15%',
-    tag: '专属',
-    maxStacks: 2,
-    requiresWeapon: 'plasma',
-  },
-  wRailRate: {
-    id: 'wRailRate',
-    name: '超导线圈',
-    description: '磁轨射速 +45%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'railgun',
-  },
-  wRailPierce: {
-    id: 'wRailPierce',
-    name: '贯穿强化',
-    description: '磁轨穿透 +2',
-    tag: '专属',
-    maxStacks: 2,
-    requiresWeapon: 'railgun',
-  },
-  wRailDmg: {
-    id: 'wRailDmg',
-    name: '电磁加速',
-    description: '磁轨伤害 +40%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'railgun',
-  },
-  wFlakCluster: {
-    id: 'wFlakCluster',
-    name: '集束弹',
-    description: '高射碎片 +2',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'flak',
-  },
-  wFlakFragDmg: {
-    id: 'wFlakFragDmg',
-    name: '碎片风暴',
-    description: '碎片伤害 +50%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'flak',
-  },
-  wFlakLife: {
-    id: 'wFlakLife',
-    name: '延时引信',
-    description: '弹丸寿命 +40%、伤害 +15%',
-    tag: '专属',
-    maxStacks: 2,
-    requiresWeapon: 'flak',
-  },
-  wLanceCharge: {
-    id: 'wLanceCharge',
-    name: '超载电容',
-    description: '光矛射速 +40%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'lance',
-  },
-  wLanceWidth: {
-    id: 'wLanceWidth',
-    name: '光束扩束',
-    description: '光矛更宽、穿透 +1',
-    tag: '专属',
-    maxStacks: 2,
-    requiresWeapon: 'lance',
-  },
+  // lance
   wLanceDmg: {
     id: 'wLanceDmg',
     name: '聚焦棱镜',
@@ -655,55 +461,123 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     maxStacks: 3,
     requiresWeapon: 'lance',
   },
-  wRicochetBounce: {
-    id: 'wRicochetBounce',
-    name: '多重弹射',
-    description: '弹射次数 +1',
+  wLanceWidth: {
+    id: 'wLanceWidth',
+    name: '光束扩束',
+    description: '光矛更宽',
     tag: '专属',
     maxStacks: 3,
-    requiresWeapon: 'ricochet',
+    requiresWeapon: 'lance',
   },
-  wRicochetDmg: {
-    id: 'wRicochetDmg',
-    name: '合金弹头',
-    description: '弹射手枪伤害 +30%',
+  wLanceRate: {
+    id: 'wLanceRate',
+    name: '超载电容',
+    description: '光矛射速 +35%',
     tag: '专属',
     maxStacks: 3,
-    requiresWeapon: 'ricochet',
+    requiresWeapon: 'lance',
   },
-  wRicochetSpeed: {
-    id: 'wRicochetSpeed',
-    name: '磁轨加速',
+  // homing
+  wHomingTurn: {
+    id: 'wHomingTurn',
+    name: '锁定矩阵',
+    description: '追踪更强',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'homing',
+  },
+  wHomingSalvo: {
+    id: 'wHomingSalvo',
+    name: '齐射协议',
+    description: '飞弹 +2',
+    tag: '专属',
+    maxStacks: 2,
+    requiresWeapon: 'homing',
+  },
+  wHomingDmg: {
+    id: 'wHomingDmg',
+    name: '燃料推进',
+    description: '飞弹伤害 +35%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'homing',
+  },
+  // blackhole
+  wBlackholeGravity: {
+    id: 'wBlackholeGravity',
+    name: '引力增幅',
+    description: '黑洞引力 +40%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'blackhole',
+  },
+  wBlackholeRadius: {
+    id: 'wBlackholeRadius',
+    name: '事件视界',
+    description: '黑洞半径 +25%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'blackhole',
+  },
+  wBlackholeDps: {
+    id: 'wBlackholeDps',
+    name: '奇点灼烧',
+    description: '黑洞持续伤害 +35%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'blackhole',
+  },
+  // missile
+  wMissileBoomDmg: {
+    id: 'wMissileBoomDmg',
+    name: '高爆战斗部',
+    description: '爆炸伤害 +35%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'missile',
+  },
+  wMissileBoomRadius: {
+    id: 'wMissileBoomRadius',
+    name: '扩爆装药',
+    description: '爆炸范围 +30%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'missile',
+  },
+  wMissileRate: {
+    id: 'wMissileRate',
+    name: '快速装填',
+    description: '导弹射速 +30%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'missile',
+  },
+  // reflect
+  wReflectBounce: {
+    id: 'wReflectBounce',
+    name: '多重反射',
+    description: '反弹次数 +1',
+    tag: '专属',
+    maxStacks: 4,
+    requiresWeapon: 'reflect',
+  },
+  wReflectDmg: {
+    id: 'wReflectDmg',
+    name: '聚焦光丝',
+    description: '反射光线伤害 +35%',
+    tag: '专属',
+    maxStacks: 3,
+    requiresWeapon: 'reflect',
+  },
+  wReflectSpeed: {
+    id: 'wReflectSpeed',
+    name: '光速偏转',
     description: '弹速 +15%、射速 +10%',
     tag: '专属',
     maxStacks: 2,
-    requiresWeapon: 'ricochet',
+    requiresWeapon: 'reflect',
   },
-  wSwarmDarts: {
-    id: 'wSwarmDarts',
-    name: '蜂群扩容',
-    description: '飞镖 +3',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'swarm',
-  },
-  wSwarmTurn: {
-    id: 'wSwarmTurn',
-    name: '神经制导',
-    description: '追踪更强、弹速 +12%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'swarm',
-  },
-  wSwarmDmg: {
-    id: 'wSwarmDmg',
-    name: '毒刺弹头',
-    description: '蜂群伤害 +35%',
-    tag: '专属',
-    maxStacks: 3,
-    requiresWeapon: 'swarm',
-  },
-  // ---- secondary buffs ----
+  // secondary buffs
   sOrbitDmg: {
     id: 'sOrbitDmg',
     name: '光轮研磨',
@@ -802,11 +676,6 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   },
 };
 
-export type UpgradeChoice = {
-  id: UpgradeId;
-  stacks: number;
-};
-
 function isSecondaryBuff(id: UpgradeId): boolean {
   return id.startsWith('s') && id.length > 1 && id[1] === id[1]?.toUpperCase();
 }
@@ -830,7 +699,6 @@ export function applyUpgrade(
     return {};
   }
   if (def.secondary) {
-    // unlock handled by caller; mark counts
     return { unlockedSecondary: def.secondary };
   }
 
@@ -841,92 +709,60 @@ export function applyUpgrade(
 
   if (isWeaponBuff(id)) {
     switch (id) {
-      case 'wPulseRate':
-        stats.pulseRate *= 1.3;
-        break;
-      case 'wPulseDouble':
-        stats.pulseExtra += 2;
-        break;
-      case 'wPulseDmg':
-        stats.pulseDmg *= 1.35;
-        break;
       case 'wScatterPellets':
-        stats.scatterPellets += 3;
+        stats.scatterPellets += 4;
         break;
-      case 'wScatterClose':
-        stats.scatterClose *= 1.4;
+      case 'wScatterDmg':
+        stats.scatterDmg *= 1.35;
         break;
       case 'wScatterPierce':
         stats.scatterPierce += 1;
         break;
+      case 'wLanceDmg':
+        stats.lanceDmg *= 1.4;
+        break;
+      case 'wLanceWidth':
+        stats.lanceWidth *= 1.28;
+        break;
+      case 'wLanceRate':
+        stats.lanceRate *= 1.35;
+        break;
       case 'wHomingTurn':
-        stats.homingTurn *= 1.15;
-        stats.bulletSpeedMult *= 1.05;
+        stats.homingTurn *= 1.3;
         break;
       case 'wHomingSalvo':
         stats.homingSalvo += 2;
         break;
-      case 'wHomingFuel':
+      case 'wHomingDmg':
         stats.homingDmg *= 1.35;
         break;
-      case 'wPlasmaBoom':
-        stats.plasmaRadius *= 1.35;
+      case 'wBlackholeGravity':
+        stats.blackholeGravity *= 1.4;
         break;
-      case 'wPlasmaDmg':
-        stats.plasmaDmg *= 1.3;
+      case 'wBlackholeRadius':
+        stats.blackholeRadius *= 1.25;
         break;
-      case 'wPlasmaChain':
-        stats.plasmaDmg *= 1.25;
-        stats.plasmaRadius *= 1.15;
+      case 'wBlackholeDps':
+        stats.blackholeDps *= 1.35;
         break;
-      case 'wRailRate':
-        stats.railRate *= 1.45;
+      case 'wMissileBoomDmg':
+        stats.missileBoomDmg *= 1.35;
         break;
-      case 'wRailPierce':
-        stats.railPierce += 2;
+      case 'wMissileBoomRadius':
+        stats.missileBoomRadius *= 1.3;
         break;
-      case 'wRailDmg':
-        stats.railDmg *= 1.4;
+      case 'wMissileRate':
+        stats.missileRate *= 1.3;
         break;
-      case 'wFlakCluster':
-        stats.flakCluster += 2;
+      case 'wReflectBounce':
+        stats.reflectBounce += 1;
         break;
-      case 'wFlakFragDmg':
-        stats.flakDmg *= 1.5;
+      case 'wReflectDmg':
+        stats.reflectDmg *= 1.35;
         break;
-      case 'wFlakLife':
-        stats.flakLife *= 1.4;
-        stats.flakDmg *= 1.15;
-        break;
-      case 'wLanceCharge':
-        stats.lanceCharge *= 1.4;
-        break;
-      case 'wLanceWidth':
-        stats.lanceWidth *= 1.35;
-        stats.pierceBonus += 1;
-        break;
-      case 'wLanceDmg':
-        stats.lanceDmg *= 1.4;
-        break;
-      case 'wRicochetBounce':
-        stats.ricochetBounce += 1;
-        break;
-      case 'wRicochetDmg':
-        stats.ricochetDmg *= 1.3;
-        break;
-      case 'wRicochetSpeed':
+      case 'wReflectSpeed':
         stats.bulletSpeedMult *= 1.15;
-        stats.ricochetSpeed *= 1.1;
-        break;
-      case 'wSwarmDarts':
-        stats.swarmDarts += 3;
-        break;
-      case 'wSwarmTurn':
-        stats.swarmTurn *= 1.25;
-        stats.bulletSpeedMult *= 1.12;
-        break;
-      case 'wSwarmDmg':
-        stats.swarmDmg *= 1.35;
+        stats.reflectSpeed *= 1.1;
         break;
       default:
         break;
@@ -1005,11 +841,8 @@ export function rollUpgradeChoices(
     if (stacks >= def.maxStacks) continue;
     if (def.weapon && stacks > 0) continue;
     if (def.secondary && stacks > 0) continue;
-    // weapon-specific buffs only when that weapon is equipped
     if (def.requiresWeapon && def.requiresWeapon !== ownedWeapon) continue;
-    // secondary buffs ONLY after the matching secondary is unlocked
     if (def.requiresSecondary && !ownedSecondaries.has(def.requiresSecondary)) continue;
-    // belt-and-suspenders: any 副武强化 / 专属 card without a matching owner is dropped
     if (def.tag === '副武强化') {
       const need = def.requiresSecondary;
       if (!need || !ownedSecondaries.has(need)) continue;

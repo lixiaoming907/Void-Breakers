@@ -1,59 +1,30 @@
 # HDR / 发光颜色一览（可自行调整）
 
-所有 glow / emissive 颜色集中在 `src/game/palette.ts`（`HDR` 对象）。
-改这一处即可全局生效。左下角 HUD 进度条颜色在 `src/styles.css` 末尾。
+## 主武器颜色与形态（`src/entities/Bullet.ts` 材质，也可在 `src/game/palette.ts` 记录）
+| 武器 | 颜色 | 形态 | 机制 |
+|------|------|------|------|
+| 散弹 | `#7df9ff` 浅蓝 | 小弹丸 | 量大扇形 |
+| 光矛 | `#4db8ff` 亮蓝 | 瞬间长光线 | 高穿透高伤，无飞行 |
+| 追踪 | `#c77dff` 紫 | 锥形弹 | 慢速强追踪 |
+| 黑洞 | `#b44dff` 深紫 | 球体 | 引力吸引 + 持续伤害 |
+| 导弹 | `#ff8c42` 橙 | 导弹体 | 爆炸范围伤害 |
+| 反射光线 | `#2dff88` 亮绿 | 短光线 | 命中弹向下一目标 |
 
-## 拾取物
+## 拾取物（`src/game/palette.ts` → `HDR`）
 | 效果 | 颜色 | 变量 |
 |------|------|------|
-| 装甲 | 红 `#ff3b4e` | `HDR.pickupHealth` |
-| 护盾 | 蓝 `#3aa0ff` | `HDR.pickupShield` |
-| 急速 | 紫 `#b44dff` | `HDR.pickupRapid` |
-| 分数 | 绿 `#2dff88` | `HDR.pickupScore` |
+| 装甲 | 红 `#ff3b4e` | `pickupHealth` |
+| 护盾 | 蓝 `#3aa0ff` | `pickupShield` |
+| 急速 | 紫 `#b44dff` | `pickupRapid` |
+| 分数 | 绿 `#2dff88` | `pickupScore` |
 
-发光强度：`HDR.pickupEmissive`（默认 1.15）× 各色补偿系数 `HDR.pickupEmissiveMul`
-（绿天然更亮，红/蓝/紫补偿 1.2–1.35）。
+强度：`HDR.pickupEmissive` × `HDR.pickupEmissiveMul`
 
-## 玩家
-| 部位 | 颜色 | 变量 |
-|------|------|------|
-| 机身 | `#00c8e0` | `playerBody` / `playerBodyEmissive` |
-| 装饰 | `#fee440` | `playerAccent` |
-| 座舱 | `#7ad0e8` | `playerCanopy` |
-| 推进焰 | `#5ad0e8` | `playerThruster` |
-| 护盾壳 | `#7ec8e8` | `shieldShell` |
+## 玩家 / 敌人 / 环境
+见 `src/game/palette.ts` 的 `playerBody`、`enemyHotEmissive`、`arenaNeonCyan` 等字段。
 
-## 子弹
-| 类型 | 颜色 | 变量 |
-|------|------|------|
-| 玩家弹 | `#7df9ff` | `bulletPlayer` |
-| 暴击 | `#fee440` | `bulletCrit` |
-| 敌弹 | `#ff6b9d` | `bulletEnemy` |
-| 飞弹 | `#f15bb5` | `bulletMissile` |
-| 等离子 | `#00f5d4` | `bulletPlasma` |
-| 光束 | `#9ef9ff` | `bulletLaser` |
-| 碎片 | `#c77dff` | `bulletFrag` |
-
-## 敌人发光
-| 类型 | emissive | 变量 |
-|------|----------|------|
-| 热色机体 | `#ff2244` | `enemyHotEmissive` |
-| 紫色远程 | `#c44dff` | `enemyVioletEmissive` |
-| 琥珀重装 | `#ff7a00` | `enemyAmberEmissive` |
-| Boss | `#ff2e88` | `enemyBossEmissive` |
-| 尖刺 | `#ff4d6d` | `enemySpikeEmissive` |
-
-## 特效 / 环境
-| 效果 | 颜色 | 变量 |
-|------|------|------|
-| 冲击波 | `#7df9ff` | `fxShock` |
-| 爆炸 | `#ff4d6d` | `fxExplosion` |
-| 新星 | `#00f5d4` | `fxNova` |
-| 环境霓虹 | `#1de0ff` | `arenaNeonCyan` |
-
-## 如何调
-1. 打开 `src/game/palette.ts`
-2. 改 `#RRGGBB`
-3. `npm run build` 后重新打包单文件
-
-若某色仍偏暗：提高 `pickupEmissiveMul` 或对应 `*Intensity`。
+## 如何改
+1. 打开 `src/game/palette.ts` 改 `#RRGGBB` / `*Intensity`
+2. 武器材质在 `src/entities/Bullet.ts` 构造函数（matLance / matBlackhole…）
+3. 左下 HUD 条颜色：`src/styles.css` 末尾 `.bar-fill.*`
+4. `npm run build` → `node scripts/bundle-single-file.mjs`

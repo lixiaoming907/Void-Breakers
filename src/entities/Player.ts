@@ -235,10 +235,10 @@ export class Player {
 
   consumeFire(): void {
     const stats = this.stats;
-    let fireMult = (stats?.fireRateMult ?? 1) * WEAPON_FIRE_RATE[stats?.weapon ?? 'pulse'];
-    // weapon-specific rate buffs persist after swapping (they only boost that weapon)
-    if (stats?.weapon === 'pulse') fireMult *= stats.pulseRate;
-    if (stats?.weapon === 'railgun') fireMult *= stats.railRate;
+    let fireMult = (stats?.fireRateMult ?? 1) * WEAPON_FIRE_RATE[stats?.weapon ?? 'scatter'];
+    if (stats?.weapon === 'lance') fireMult *= stats.lanceRate;
+    if (stats?.weapon === 'missile') fireMult *= stats.missileRate;
+    if (stats?.weapon === 'reflect') fireMult *= stats.reflectSpeed;
     const base = this.state.rapidTimer > 0 ? PLAYER.rapidFireCooldown : PLAYER.fireCooldown;
     this.state.fireCooldown = base / Math.max(0.2, fireMult);
   }
