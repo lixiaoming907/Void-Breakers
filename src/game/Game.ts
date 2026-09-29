@@ -14,6 +14,7 @@ import {
   defaultStats,
   rollUpgradeChoices,
   UPGRADES,
+  WEAPON_DAMAGE,
   type PlayerStats,
   type UpgradeId,
 } from './Upgrades';
@@ -455,6 +456,7 @@ export class Game {
         );
         // sample along the beam and damage enemies in the corridor
         const enemyList = this.enemies.enemies;
+        let hitFx = 0;
         for (const enemy of enemyList) {
           if (!enemy.alive) continue;
           const ex = enemy.group.position.x - fromX;
@@ -463,7 +465,16 @@ export class Game {
           if (along < 0 || along > range) continue;
           const side = Math.abs(ex * -dir.z + ez * dir.x);
           if (side <= enemy.radius + 0.35 * width) {
-            this.damageEnemy(enemy, damage * s.lanceDmg * 1.65, crit, 0);
+            this.damageEnemy(enemy, damage * s.lanceDmg * WEAPON_DAMAGE.lanceHit, crit, 0);
+            // pierce beam has no impact sprite — spark on each victim so hits read clearly
+            if (hitFx < 12) {
+              _v2.set(enemy.group.position.x, 0.55, enemy.group.position.z);
+              this.effects.burst(_v2, crit ? '#fee440' : '#9ef9ff', 4, 3.6, 0.85);
+              if (crit || hitFx === 0) {
+                this.effects.shockwave(_v2, crit ? '#fee440' : '#7df9ff', 1.15, 0.22);
+              }
+              hitFx += 1;
+            }
           }
         }
       }

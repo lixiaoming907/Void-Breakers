@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { WeaponId } from '../game/Upgrades';
+import { WEAPON_DAMAGE, type WeaponId } from '../game/Upgrades';
 
 export type BulletKind =
   | 'player'
@@ -246,7 +246,7 @@ export class BulletPool {
             .copy(dir)
             .addScaledVector(right, t * spread)
             .normalize();
-          this.spawn('player', req.origin, d, dmgMul * 0.36, req.speed * 1.15, 0.7, {
+          this.spawn('player', req.origin, d, dmgMul * WEAPON_DAMAGE.scatterPellet, req.speed * 1.15, 0.7, {
             pierce: req.pierce + req.weaponPierce,
             radius: 0.11,
             crit: req.crit,
@@ -261,7 +261,7 @@ export class BulletPool {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.32;
           const d = _dir.copy(dir).addScaledVector(right, offset).normalize();
-          this.spawn('player-homing', req.origin, d, dmgMul * 1.55, req.speed * 0.32, 5.2, {
+          this.spawn('player-homing', req.origin, d, dmgMul * WEAPON_DAMAGE.homing, req.speed * 0.32, 5.2, {
             pierce: 0,
             homing: 6.5 * req.weaponTurn,
             radius: 0.2,
@@ -285,7 +285,7 @@ export class BulletPool {
             // base gravity is weak — upgrades stack up so late game becomes inescapable
             gravity: 2.2 * req.weaponExtra,
             aoe: 1.8 * req.weaponTurn,
-            dps: dmgMul * 2.6 * req.weaponLife,
+            dps: dmgMul * WEAPON_DAMAGE.blackholeDps * req.weaponLife,
           });
         }
         break;
@@ -296,14 +296,14 @@ export class BulletPool {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.28;
           const d = _dir.copy(dir).addScaledVector(right, offset).normalize();
-          this.spawn('player-missile', req.origin, d, dmgMul * 1.2, req.speed * 0.55, 3.2, {
+          this.spawn('player-missile', req.origin, d, dmgMul * WEAPON_DAMAGE.missileHit, req.speed * 0.55, 3.2, {
             pierce: 0,
             radius: 0.18,
             crit: req.crit,
             visualScale: 1.15,
             explosive: true,
             // primary missile boom: 20x prior baseline so it actually kills
-            boomDamage: dmgMul * 68,
+            boomDamage: dmgMul * WEAPON_DAMAGE.missileBoom,
             aoe: 2.4 * req.weaponTurn,
           });
         }
@@ -315,7 +315,7 @@ export class BulletPool {
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.12;
           const d = _dir.copy(dir).addScaledVector(right, offset).normalize();
-          this.spawn('player-reflect', req.origin, d, dmgMul * 1.05, req.speed * 1.35 * req.weaponLife, 1.6, {
+          this.spawn('player-reflect', req.origin, d, dmgMul * WEAPON_DAMAGE.reflect, req.speed * 1.35 * req.weaponLife, 1.6, {
             pierce: 0,
             radius: 0.14,
             crit: req.crit,

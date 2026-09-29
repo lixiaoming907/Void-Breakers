@@ -195,6 +195,28 @@ export const WEAPON_FIRE_RATE: Record<WeaponId, number> = {
   reflect: 0.88,
 };
 
+/**
+ * 主武器基础伤害倍率。
+ * 实际伤害 = PLAYER.bulletDamage(常量) × damageMult × 波次缩放 × 下列倍率 × lanceDmg 等成长。
+ * 改武器强弱优先改这里。
+ */
+export const WEAPON_DAMAGE = {
+  /** 光矛单次命中（瞬间光束，可穿透整条线上的敌人） */
+  lanceHit: 3.3,
+  /** 散弹 — 每颗弹丸 */
+  scatterPellet: 0.36,
+  /** 追踪飞弹 — 单发 */
+  homing: 1.55,
+  /** 黑洞炮 — 每秒接触伤害（再乘 blackholeDps 成长） */
+  blackholeDps: 2.6,
+  /** 导弹 — 直击伤害 */
+  missileHit: 1.2,
+  /** 导弹 — 爆炸伤害（AOE） */
+  missileBoom: 68,
+  /** 反射光线 — 单发 */
+  reflect: 1.05,
+} as const;
+
 export function defaultStats(): PlayerStats {
   return {
     fireRateMult: 1,

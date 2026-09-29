@@ -295,6 +295,9 @@ export class EnemyManager {
                 ? 0.35
                 : 0.55;
         body.position.y = baseY + Math.sin(elapsed * 2.8 + enemy.orbitPhase) * 0.06;
+        // hitFlash was tracked but never drawn — scale pop so pierce hits are readable
+        const hitPop = enemy.hitFlash > 0 ? 1 + enemy.hitFlash * 2.4 : 1;
+        body.scale.setScalar(hitPop);
       }
 
       _toPlayer.subVectors(playerPos, enemy.group.position);
