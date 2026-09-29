@@ -279,30 +279,32 @@ export class BulletPool {
           const d = _dir.copy(dir).addScaledVector(right, offset).normalize();
           this.spawn('player-blackhole', req.origin, d, 0, req.speed * 0.22, 6.5, {
             pierce: 0,
-            radius: 1.35 * req.weaponTurn,
+            radius: 1.15 * req.weaponTurn,
             crit: req.crit,
             visualScale: 1.0,
-            gravity: 14 * req.weaponExtra,
-            aoe: 2.2 * req.weaponTurn,
-            dps: dmgMul * 3.2 * req.weaponLife,
+            // base gravity is weak — upgrades stack up so late game becomes inescapable
+            gravity: 2.2 * req.weaponExtra,
+            aoe: 1.8 * req.weaponTurn,
+            dps: dmgMul * 2.6 * req.weaponLife,
           });
         }
         break;
       }
 
       case 'missile': {
-        // 中等射速，命中/超时爆炸
+        // 中等射速，命中/超时爆炸 — 爆伤吃 damageMult 与 missileBoomDmg 一次
         for (let i = 0; i < shots; i++) {
           const offset = (i - (shots - 1) / 2) * 0.28;
           const d = _dir.copy(dir).addScaledVector(right, offset).normalize();
-          this.spawn('player-missile', req.origin, d, dmgMul * 1.1, req.speed * 0.55, 3.2, {
+          this.spawn('player-missile', req.origin, d, dmgMul * 1.2, req.speed * 0.55, 3.2, {
             pierce: 0,
             radius: 0.18,
             crit: req.crit,
             visualScale: 1.15,
             explosive: true,
-            boomDamage: dmgMul * 1.8 * req.weaponExtra,
-            aoe: 2.1 * req.weaponTurn,
+            // primary missile boom: clearly above secondary missile (28)
+            boomDamage: dmgMul * 3.4,
+            aoe: 2.4 * req.weaponTurn,
           });
         }
         break;
@@ -524,12 +526,23 @@ export class BulletPool {
     this.release(bullet);
   }
 
-  bounce(bullet: Bullet, target: { x: number; z: number }, speed: number): boolean {
+  bounce(bullet: Bullet, target: { x: number; z: number } | null, speed: number): boolean {
     if (bullet.bounces <= 0) return false;
     bullet.bounces -= 1;
-    _bounceDir.set(target.x - bullet.mesh.position.x, 0, target.z - bullet.mesh.position.z);
-    if (_bounceDir.lengthSq() < 1e-6) return false;
-    _bounceDir.normalize();
+    if (target) {
+      _bounceDir.set(target.x - bullet.mesh.position.x, 0, target.z - bullet.mesh.position.z);
+      if (_bounceDir.lengthSq() > 1e-6) {
+        _bounceDir.normalize();
+      } else {
+        target = null;
+      }
+    }
+    if (!target) {
+      // no second target: deflect at a readable angle instead of dying (anti-frustration)
+      const v = bullet.velocity;
+      const ang = Math.atan2(v.z, v.x) + (Math.random() > 0.5 ? 0.85 : -0.85);
+      _bounceDir.set(Math.cos(ang), 0, Math.sin(ang));
+    }
     bullet.velocity.copy(_bounceDir).multiplyScalar(speed);
     bullet.life = Math.max(bullet.life, 1.1);
     bullet.spawnGrace = 0.03;
